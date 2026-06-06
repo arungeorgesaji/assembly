@@ -1,9 +1,10 @@
 import { getOpenAIConfig } from "./config.js";
+import { buildTaskContext } from "./context-builder.js";
 
 const RESULT_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["taskId", "status", "summary", "changedFiles", "artifacts", "risks", "patch"],
+  required: ["taskId", "status", "summary", "changedFiles", "artifacts", "risks", "patch", "fileUpdates"],
   properties: {
     taskId: { type: "string" },
     status: { type: "string", enum: ["complete", "blocked", "failed"] },
@@ -24,11 +25,26 @@ const RESULT_SCHEMA = {
       type: "string",
       description: "Unified diff patch to apply. Empty string if no code changes are needed.",
     },
+    fileUpdates: {
+      type: "array",
+      description: "Full file replacements to write. Prefer this over patch when editing scoped files.",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["path", "content"],
+        properties: {
+          path: { type: "string" },
+          content: { type: "string" },
+        },
+      },
+    },
   },
 };
 
 export function createOpenAIAgentRunner(config = getOpenAIConfig()) {
-  return async function runOpenAIAgent(task) {
+  return async function runOpenAIAgent(task, runContext = {}) {
+    const rootDir = runContext.rootDir ?? process.cwd();
+    const taskContext = await buildTaskContext(task, rootDir);
     const response = await fetch(`${config.baseUrl}/responses`, {
       method: "POST",
       headers: {
@@ -44,9 +60,16 @@ export function createOpenAIAgentRunner(config = getOpenAIConfig()) {
               {
                 type: "input_text",
                 text:
-                  "You are an Assembly task agent. Return only data matching the supplied schema. " +
-                  "If you make code changes, include a unified diff in patch and list every changed file. " +
-                  "Changed files must stay within the task scope.",
+                  "You are an Assembly task agent. Return only JSON matching the supplied schema. " +
+                  "You handle implementation tasks only. You may only edit files inside the task scope. " +
+                  "Prefer fileUpdates for edits: return the full replacement content for each changed file. " +
+                  "For fileUpdates, preserve all unrelated existing content exactly and make the smallest requested edit. " +
+                  "When task.changePolicy is additive, the updated file must keep every existing line in the same order and only insert new lines. " +
+                  "Do not rewrite, summarize, restructure, or replace a whole file with new documentation unless explicitly requested. " +
+                  "Use patch only if you can produce a complete unified diff that applies cleanly with git apply from the repository root. " +
+                  "Never use placeholder hunks or ellipses. Include every changed file in changedFiles. " +
+                  "Include result.json in artifacts, and include file-updates.json when fileUpdates is non-empty. " +
+                  "If you do not have enough context to safely edit, return status blocked with an empty patch.",
               },
             ],
           },
@@ -55,7 +78,17 @@ export function createOpenAIAgentRunner(config = getOpenAIConfig()) {
             content: [
               {
                 type: "input_text",
-                text: JSON.stringify({ task }, null, 2),
+                text: JSON.stringify(
+                  {
+                    request: runContext.plan?.request,
+                    task,
+                    verification: runContext.plan?.verification ?? [],
+                    scopedFiles: taskContext.files,
+                    contextLimits: taskContext.limits,
+                  },
+                  null,
+                  2,
+                ),
               },
             ],
           },

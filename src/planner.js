@@ -7,6 +7,7 @@ export function createPlan(request, { rootDir = process.cwd(), repoContext = ins
   const implementationScope = repoContext.suggestedScopes.implementation;
   const reviewScope = repoContext.suggestedScopes.review;
   const verification = repoContext.verificationCommands;
+  const changePolicy = normalizedRequest.toLowerCase().startsWith("add ") ? "additive" : "modify";
 
   const tasks = [
     createTask({
@@ -33,6 +34,7 @@ export function createPlan(request, { rootDir = process.cwd(), repoContext = ins
       description:
         "Make the smallest coherent code changes needed to satisfy the approved plan.",
       scope: implementationScope,
+      changePolicy,
       dependencies: [`${slug}-plan`],
       acceptanceCriteria: [
         "Changes are limited to the assigned ownership area.",

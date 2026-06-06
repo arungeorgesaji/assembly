@@ -1,4 +1,5 @@
 import { createAgentRunner } from "./agent-runner.js";
+import { applyFileUpdates, validateAdditiveFileUpdates } from "./file-updates.js";
 import { applyPatch } from "./patch.js";
 import { createPlan } from "./planner.js";
 import { createFinalReport } from "./report.js";
@@ -49,7 +50,7 @@ async function executeReadyTasks({ runId, plan, state, rootDir, agentRunner }) {
 
     let result;
     try {
-      result = await agentRunner(task);
+      result = await agentRunner(task, { rootDir, plan, state, runId });
     } catch (error) {
       const failure = {
         taskId: task.id,
@@ -66,9 +67,13 @@ async function executeReadyTasks({ runId, plan, state, rootDir, agentRunner }) {
       break;
     }
     const resultErrors = validateTaskResult(task, result);
+    resultErrors.push(...(await validateAdditiveFileUpdates(task, result, rootDir)));
     await writeArtifact(runId, task.id, "result.json", result, rootDir);
     if (result.patch) {
       await writeRunFile(runId, `artifacts/${task.id}/patch.diff`, result.patch, rootDir);
+    }
+    if (result.fileUpdates?.length > 0) {
+      await writeArtifact(runId, task.id, "file-updates.json", result.fileUpdates, rootDir);
     }
 
     if (resultErrors.length > 0) {
@@ -86,6 +91,28 @@ async function executeReadyTasks({ runId, plan, state, rootDir, agentRunner }) {
       await writeState(runId, state, rootDir);
       await appendEvent(runId, { type: "task.failed", taskId: task.id, data: failure }, rootDir);
       break;
+    }
+
+    if (result.status === "complete" && result.fileUpdates?.length > 0) {
+      try {
+        await applyFileUpdates(result.fileUpdates, rootDir);
+        await appendEvent(runId, { type: "files.updated", taskId: task.id, data: { changedFiles: result.changedFiles } }, rootDir);
+      } catch (error) {
+        const failure = {
+          taskId: task.id,
+          status: "failed",
+          summary: "File updates failed to apply.",
+          changedFiles: result.changedFiles,
+          artifacts: ["result.json", "file-updates.json"],
+          risks: [error.message],
+        };
+        state.tasks[task.id].status = "failed";
+        state.currentTaskId = null;
+        await writeArtifact(runId, task.id, "file-update-errors.json", { error: error.message }, rootDir);
+        await writeState(runId, state, rootDir);
+        await appendEvent(runId, { type: "task.failed", taskId: task.id, data: failure }, rootDir);
+        break;
+      }
     }
 
     if (result.status === "complete" && result.patch) {

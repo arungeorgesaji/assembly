@@ -5,13 +5,14 @@ import path from "node:path";
 import test from "node:test";
 
 import { main } from "../src/cli.js";
+import { runStubAgent } from "../src/agent-runner.js";
 import { createRun } from "../src/orchestrator.js";
 import { getRunDir, readRun } from "../src/run-store.js";
 
 test("createRun persists request, plan, state, events, and artifacts", async () => {
   const rootDir = await mkdtemp(path.join(tmpdir(), "assembly-run-"));
 
-  const { runId } = await createRun("Add persisted workflow runs", { rootDir });
+  const { runId } = await createRun("Add persisted workflow runs", { rootDir, agentRunner: runStubAgent });
   const run = await readRun(runId, rootDir);
 
   assert.equal(run.request.request, "Add persisted workflow runs");
@@ -46,11 +47,13 @@ test("createRun persists request, plan, state, events, and artifacts", async () 
 test("status command prints run summary", async () => {
   const rootDir = await mkdtemp(path.join(tmpdir(), "assembly-cli-"));
   const previousCwd = process.cwd();
+  const previousProvider = process.env.ASSEMBLY_AGENT_PROVIDER;
   const stdout = { text: "", write(chunk) { this.text += chunk; } };
   const stderr = { text: "", write(chunk) { this.text += chunk; } };
 
   try {
     process.chdir(rootDir);
+    process.env.ASSEMBLY_AGENT_PROVIDER = "stub";
     const runCode = await main(["run", "Add", "status", "command"], { stdout, stderr });
     assert.equal(runCode, 0);
     const runId = JSON.parse(stdout.text).runId;
@@ -63,6 +66,11 @@ test("status command prints run summary", async () => {
     assert.match(stdout.text, /Status: complete/);
   } finally {
     process.chdir(previousCwd);
+    if (previousProvider === undefined) {
+      delete process.env.ASSEMBLY_AGENT_PROVIDER;
+    } else {
+      process.env.ASSEMBLY_AGENT_PROVIDER = previousProvider;
+    }
   }
 });
 
@@ -166,6 +174,45 @@ test("createRun applies a valid task patch", async () => {
   assert.equal(run.state.status, "complete");
   assert.equal(await readFile(path.join(rootDir, "src/local.js"), "utf8"), "export const value = 2;\n");
   assert.ok(run.events.some((event) => event.type === "patch.applied"));
+});
+
+test("createRun applies valid file updates", async () => {
+  const rootDir = await mkdtemp(path.join(tmpdir(), "assembly-apply-file-updates-"));
+  await mkdir(path.join(rootDir, "src"));
+  await mkdir(path.join(rootDir, "tests"));
+  await writeFile(path.join(rootDir, "package.json"), JSON.stringify({ scripts: { test: "node --test" } }));
+  await writeFile(path.join(rootDir, "src/local.js"), "export const value = 1;\n");
+
+  const { runId } = await createRun("Update local value with file updates", {
+    rootDir,
+    agentRunner: async (task) => {
+      if (task.owner === "implementation-agent") {
+        return {
+          taskId: task.id,
+          status: "complete",
+          summary: "Updated local value.",
+          changedFiles: ["src/local.js"],
+          artifacts: ["result.json", "file-updates.json"],
+          risks: [],
+          fileUpdates: [{ path: "src/local.js", content: "export const value = 3;\n" }],
+        };
+      }
+
+      return {
+        taskId: task.id,
+        status: "complete",
+        summary: "No code changes needed.",
+        changedFiles: [],
+        artifacts: ["result.json"],
+        risks: [],
+      };
+    },
+  });
+
+  const run = await readRun(runId, rootDir);
+  assert.equal(run.state.status, "complete");
+  assert.equal(await readFile(path.join(rootDir, "src/local.js"), "utf8"), "export const value = 3;\n");
+  assert.ok(run.events.some((event) => event.type === "files.updated"));
 });
 
 test("createRun fails when verification command fails", async () => {

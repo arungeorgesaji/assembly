@@ -19,6 +19,7 @@ test("createPlan returns a valid task graph", () => {
     "README.md",
     ".gitignore",
   ]);
+  assert.equal(plan.tasks[1].changePolicy, "additive");
   assert.deepEqual(validatePlan(plan), []);
 });
 

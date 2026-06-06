@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import { createOpenAIAgentRunner } from "../src/openai-agent-runner.js";
 
 test("OpenAI agent runner posts task and parses structured output", async () => {
   const previousFetch = globalThis.fetch;
+  const rootDir = await mkdtemp(path.join(tmpdir(), "assembly-openai-runner-"));
+  await mkdir(path.join(rootDir, "src"));
+  await writeFile(path.join(rootDir, "src", "task.js"), "export const task = true;\n");
   const task = {
     id: "task-1",
     title: "Do scoped work",
@@ -21,6 +27,9 @@ test("OpenAI agent runner posts task and parses structured output", async () => 
       assert.equal(body.model, "test-model");
       assert.equal(body.text.format.type, "json_schema");
       assert.equal(body.text.format.strict, true);
+      const userPayload = JSON.parse(body.input[1].content[0].text);
+      assert.equal(userPayload.request, "Test request");
+      assert.equal(userPayload.scopedFiles[0].path, "src/task.js");
 
       return {
         ok: true,
@@ -33,6 +42,7 @@ test("OpenAI agent runner posts task and parses structured output", async () => 
             artifacts: ["result.json"],
             risks: [],
             patch: "",
+            fileUpdates: [],
           }),
         }),
       };
@@ -44,7 +54,7 @@ test("OpenAI agent runner posts task and parses structured output", async () => 
       baseUrl: "https://example.test/v1",
     });
 
-    assert.deepEqual(await runner(task), {
+    assert.deepEqual(await runner(task, { rootDir, plan: { request: "Test request", verification: [] } }), {
       taskId: "task-1",
       status: "complete",
       summary: "Structured result.",
@@ -52,6 +62,7 @@ test("OpenAI agent runner posts task and parses structured output", async () => 
       artifacts: ["result.json"],
       risks: [],
       patch: "",
+      fileUpdates: [],
     });
   } finally {
     globalThis.fetch = previousFetch;

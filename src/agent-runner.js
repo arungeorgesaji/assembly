@@ -20,7 +20,13 @@ export function createAgentRunner() {
     return runStubAgent;
   }
   if (provider === "openai") {
-    return createOpenAIAgentRunner();
+    const openAIAgentRunner = createOpenAIAgentRunner();
+    return async (task, context) => {
+      if (task.owner !== "implementation-agent") {
+        return runStubAgent(task);
+      }
+      return openAIAgentRunner(task, context);
+    };
   }
   throw new Error(`unknown ASSEMBLY_AGENT_PROVIDER: ${provider}`);
 }

@@ -1,3 +1,4 @@
+import { validateFileUpdatesForTask } from "./file-updates.js";
 import { validateChangedFilesWithinScope } from "./scope.js";
 import { validatePatchForTask } from "./patch.js";
 
@@ -40,6 +41,7 @@ export function validateTaskResult(task, result) {
   if (typeof result.patch === "string") {
     errors.push(...validatePatchForTask(task, result));
   }
+  errors.push(...validateFileUpdatesForTask(task, result));
 
   return errors;
 }

@@ -181,6 +181,7 @@ Each run writes:
     <task-id>/
       result.json
       patch.diff
+      file-updates.json
     verification/
       result.json
 ```
@@ -209,6 +210,8 @@ The first working slice includes:
 - Agent result validation for task id, terminal status, summary, changed files, artifacts, and risks
 - Changed-file validation against each task's assigned scope
 - Unified diff patch validation and local application through `git apply`
+- Structured full-file updates for reliable local edits when patch generation is too brittle
+- Additive change policy for `Add ...` requests to prevent accidental line removals
 - Post-run verification command execution with stored stdout, stderr, and exit codes
 - Blocked and failed run handling
 - Final report generation for every run
@@ -228,11 +231,12 @@ Agents must return structured results:
   "changedFiles": [],
   "artifacts": ["result.json"],
   "risks": [],
-  "patch": ""
+  "patch": "",
+  "fileUpdates": []
 }
 ```
 
-Valid statuses are `complete`, `blocked`, and `failed`. A completed task must include at least one artifact. If `patch` is present, it must be a unified diff whose changed files are all listed in `changedFiles` and allowed by the task scope. If the result does not match the dispatched task or fails validation, Assembly marks the task and run as failed.
+Valid statuses are `complete`, `blocked`, and `failed`. A completed task must include at least one artifact. If `patch` is present, it must be a unified diff whose changed files are all listed in `changedFiles` and allowed by the task scope. Agents can also return `fileUpdates` entries with full replacement file contents. If the result does not match the dispatched task or fails validation, Assembly marks the task and run as failed.
 
 ## Task Scope Contract
 
@@ -261,6 +265,21 @@ For local execution, an agent can return a unified diff in `patch`. Assembly the
 5. applies the patch with `git apply --check` followed by `git apply`
 6. runs detected verification commands such as `npm test`
 7. writes verification output to `artifacts/verification/result.json`
+
+For model-generated edits, Assembly also supports `fileUpdates`:
+
+```json
+{
+  "fileUpdates": [
+    {
+      "path": "README.md",
+      "content": "full replacement file content"
+    }
+  ]
+}
+```
+
+Assembly validates each update path against task scope before writing it. For requests that begin with `Add`, implementation tasks use an additive change policy: existing file lines must remain in the same order, so accidental rewrites or removals fail validation.
 
 ## License
 
