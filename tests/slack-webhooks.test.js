@@ -37,6 +37,8 @@ test("handleSlackWebhook answers url verification challenges", async () => {
 test("handleSlackWebhook queues Slack app mentions and deduplicates event ids", async () => {
   const rootDir = await mkdtemp(path.join(tmpdir(), "assembly-slack-event-"));
   const previousSecret = process.env.SLACK_SIGNING_SECRET;
+  const previousToken = process.env.SLACK_BOT_TOKEN;
+  const previousFetch = globalThis.fetch;
   const rawBody = JSON.stringify({
     type: "event_callback",
     team_id: "T1",
@@ -54,6 +56,13 @@ test("handleSlackWebhook queues Slack app mentions and deduplicates event ids", 
 
   try {
     process.env.SLACK_SIGNING_SECRET = "secret";
+    process.env.SLACK_BOT_TOKEN = "xoxb-test";
+    const slackPosts = [];
+    globalThis.fetch = async (url, options) => {
+      slackPosts.push({ url, body: JSON.parse(options.body) });
+      return { json: async () => ({ ok: true, ts: "124.000" }) };
+    };
+
     const first = await handleSlackWebhook({ signature, timestamp, rawBody }, rootDir);
     const second = await handleSlackWebhook({ signature, timestamp, rawBody }, rootDir);
 
@@ -70,8 +79,14 @@ test("handleSlackWebhook queues Slack app mentions and deduplicates event ids", 
     assert.equal(job.delivery, "Ev1");
     assert.equal(job.payload.text, "Add README docs");
     assert.equal(job.payload.threadTs, "123.456");
+    assert.equal(slackPosts.length, 1);
+    assert.equal(slackPosts[0].body.channel, "C1");
+    assert.equal(slackPosts[0].body.thread_ts, "123.456");
+    assert.match(slackPosts[0].body.text, /^On it\. Queued Assembly job /);
   } finally {
     restoreEnv("SLACK_SIGNING_SECRET", previousSecret);
+    restoreEnv("SLACK_BOT_TOKEN", previousToken);
+    globalThis.fetch = previousFetch;
   }
 });
 

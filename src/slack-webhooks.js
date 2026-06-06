@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { getSlackSigningSecret } from "./config.js";
 import { enqueueJob, findJobByDelivery } from "./job-store.js";
+import { postSlackMessage } from "./slack.js";
 
 const FIVE_MINUTES_SECONDS = 60 * 5;
 
@@ -60,6 +61,7 @@ export async function handleSlackWebhook({ signature, timestamp, rawBody }, root
     delivery: normalized.delivery,
     payload: normalized.payload,
   }, rootDir);
+  await acknowledgeSlackJob(job);
 
   return { status: 202, body: { queued: true, jobId: job.id } };
 }
@@ -103,4 +105,16 @@ export function normalizeSlackWebhook(payload) {
 
 function stripSlackAppMention(text) {
   return String(text).replace(/<@[A-Z0-9]+>\s*/gi, "");
+}
+
+async function acknowledgeSlackJob(job) {
+  try {
+    await postSlackMessage({
+      channel: job.payload.channel,
+      threadTs: job.payload.threadTs,
+      text: `On it. Queued Assembly job ${job.id}.`,
+    });
+  } catch {
+    // The queued job remains the source of truth even if the fast ack fails.
+  }
 }
