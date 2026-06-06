@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { getGitHubWebhookSecret } from "./config.js";
-import { enqueueJob } from "./job-store.js";
+import { enqueueJob, findJobByDelivery } from "./job-store.js";
 
 export function verifyGitHubSignature(rawBody, signature, secret = getGitHubWebhookSecret()) {
   if (!secret) {
@@ -31,6 +31,11 @@ export async function handleGitHubWebhook({ event, delivery, signature, rawBody 
   const normalized = normalizeGitHubWebhook(event, payload);
   if (normalized.ignored) {
     return { status: 202, body: normalized };
+  }
+
+  const existingJob = await findJobByDelivery(delivery, rootDir);
+  if (existingJob) {
+    return { status: 202, body: { queued: false, duplicate: true, jobId: existingJob.id } };
   }
 
   const job = await enqueueJob({

@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const JOBS_DIR = ".assembly/jobs";
@@ -27,6 +27,33 @@ export async function readJob(jobId, rootDir = process.cwd()) {
   return JSON.parse(await readFile(getJobPath(jobId, rootDir), "utf8"));
 }
 
+export async function listJobs(rootDir = process.cwd()) {
+  let entries;
+  try {
+    entries = await readdir(path.join(rootDir, JOBS_DIR));
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+
+  const jobs = await Promise.all(
+    entries
+      .filter((entry) => entry.endsWith(".json"))
+      .map(async (entry) => JSON.parse(await readFile(path.join(rootDir, JOBS_DIR, entry), "utf8"))),
+  );
+  return jobs.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+}
+
+export async function findJobByDelivery(delivery, rootDir = process.cwd()) {
+  if (!delivery) {
+    return null;
+  }
+  const jobs = await listJobs(rootDir);
+  return jobs.find((job) => job.delivery === delivery) ?? null;
+}
+
 export async function updateJob(jobId, updates, rootDir = process.cwd()) {
   const job = await readJob(jobId, rootDir);
   const updatedJob = {
@@ -38,6 +65,28 @@ export async function updateJob(jobId, updates, rootDir = process.cwd()) {
   return updatedJob;
 }
 
+export async function resetJobForRetry(jobId, rootDir = process.cwd()) {
+  const job = await readJob(jobId, rootDir);
+  const retryCount = (job.retryCount ?? 0) + 1;
+  const retriedAt = new Date().toISOString();
+  const resetJob = {
+    ...job,
+    status: "queued",
+    retryCount,
+    retriedAt,
+    updatedAt: retriedAt,
+  };
+
+  delete resetJob.startedAt;
+  delete resetJob.completedAt;
+  delete resetJob.failedAt;
+  delete resetJob.error;
+  delete resetJob.result;
+
+  await writeJob(resetJob, rootDir);
+  return resetJob;
+}
+
 async function writeJob(job, rootDir) {
   await mkdir(path.join(rootDir, JOBS_DIR), { recursive: true });
   await writeFile(getJobPath(job.id, rootDir), `${JSON.stringify(job, null, 2)}\n`);
@@ -46,4 +95,3 @@ async function writeJob(job, rootDir) {
 function getJobPath(jobId, rootDir) {
   return path.join(rootDir, JOBS_DIR, `${jobId}.json`);
 }
-

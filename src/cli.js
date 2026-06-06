@@ -5,6 +5,7 @@ import { createRun } from "./orchestrator.js";
 import { createFollowUpRun } from "./follow-up.js";
 import { createGitHubPullRequest, getGitHubComment } from "./github.js";
 import { processJob } from "./job-worker.js";
+import { listJobs, readJob, resetJobForRetry } from "./job-store.js";
 import { readRun } from "./run-store.js";
 import { startWebhookServer } from "./webhook-server.js";
 import { loadEnv } from "./config.js";
@@ -187,14 +188,45 @@ async function handleGitHub(args, io) {
 
 async function handleJob(args, io) {
   const [subcommand, jobId] = args;
-  if (subcommand !== "process" || !jobId) {
-    io.stderr.write("usage: assembly job process <job-id>\n");
+  const pretty = args.includes("--pretty");
+  const json = args.includes("--json");
+
+  if (subcommand === "list") {
+    const jobs = await listJobs();
+    if (json) {
+      io.stdout.write(`${JSON.stringify(jobs, null, pretty ? 2 : 0)}\n`);
+      return 0;
+    }
+    io.stdout.write(formatJobs(jobs));
+    return 0;
+  }
+
+  if (subcommand === "inspect" && jobId) {
+    const job = await readJob(jobId);
+    io.stdout.write(`${JSON.stringify(job, null, pretty ? 2 : 0)}\n`);
+    return 0;
+  }
+
+  if (subcommand === "process" && jobId) {
+    const job = await processJob(jobId);
+    io.stdout.write(`${JSON.stringify(job, null, 2)}\n`);
+    return job.status === "failed" ? 1 : 0;
+  }
+
+  if (subcommand === "retry" && jobId) {
+    await resetJobForRetry(jobId);
+    const job = await processJob(jobId);
+    io.stdout.write(`${JSON.stringify(job, null, 2)}\n`);
+    return job.status === "failed" ? 1 : 0;
+  }
+
+  if (subcommand === "retry") {
+    io.stderr.write("usage: assembly job retry <job-id>\n");
     return 2;
   }
 
-  const job = await processJob(jobId);
-  io.stdout.write(`${JSON.stringify(job, null, 2)}\n`);
-  return job.status === "failed" ? 1 : 0;
+  io.stderr.write("usage: assembly job <list|inspect|process|retry> ...\n");
+  return 2;
 }
 
 function handleWebhook(args, io) {
@@ -230,6 +262,39 @@ function formatStatus({ request, state }) {
     taskLines,
     "",
   ].join("\n");
+}
+
+function formatJobs(jobs) {
+  if (jobs.length === 0) {
+    return "No jobs found.\n";
+  }
+
+  const rows = jobs.map((job) => [
+    job.id,
+    job.status,
+    job.type,
+    describeJobTarget(job),
+    job.updatedAt ?? job.createdAt,
+  ]);
+  const headers = ["ID", "STATUS", "TYPE", "TARGET", "UPDATED"];
+  const widths = headers.map((header, index) => Math.max(header.length, ...rows.map((row) => String(row[index] ?? "").length)));
+  const formatRow = (row) => row.map((value, index) => String(value ?? "").padEnd(widths[index])).join("  ");
+  return [
+    formatRow(headers),
+    formatRow(widths.map((width) => "-".repeat(width))),
+    ...rows.map(formatRow),
+    "",
+  ].join("\n");
+}
+
+function describeJobTarget(job) {
+  if (job.payload?.prNumber) {
+    return `PR #${job.payload.prNumber}`;
+  }
+  if (job.payload?.issueNumber) {
+    return `Issue #${job.payload.issueNumber}`;
+  }
+  return "";
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

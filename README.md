@@ -115,7 +115,7 @@ The goal is not to replace engineers. The goal is to make AI-assisted developmen
 
 ## Getting Started
 
-Assembly currently ships as a local Node.js CLI. It does not require API keys yet.
+Assembly currently ships as a local Node.js CLI. The deterministic stub runner works without API keys; provider-backed implementation and review require an OpenAI API key.
 
 Prerequisites:
 
@@ -391,19 +391,25 @@ Webhook handling is asynchronous:
 
 1. verify GitHub signature
 2. ignore unsupported events or comments without `@assembly`
-3. enqueue a job under `.assembly/jobs/`
-4. respond to GitHub quickly
-5. process the job in the background
-6. create a run or follow-up run
-7. push owned changes to a new PR branch or existing PR branch
-8. comment back on the issue or PR
+3. ignore duplicate GitHub delivery IDs that already have a job
+4. enqueue a job under `.assembly/jobs/`
+5. respond to GitHub quickly
+6. process the job in the background
+7. create a temporary git worktree so webhook jobs do not touch your dirty local checkout
+8. create a run or follow-up run
+9. copy the run record back into `.assembly/runs/`
+10. push owned changes to a new PR branch or existing PR branch
+11. comment back on the issue or PR
 
 If a GitHub job fails, Assembly comments back on the issue or PR with the failure reason.
 
 For manual retry/debugging:
 
 ```bash
+node src/cli.js job list
+node src/cli.js job inspect <job-id> --pretty
 node src/cli.js job process <job-id>
+node src/cli.js job retry <job-id>
 ```
 
 ## License

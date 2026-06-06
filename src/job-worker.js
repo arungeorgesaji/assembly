@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 
 import { createRun } from "./orchestrator.js";
 import { createFollowUpRun } from "./follow-up.js";
+import { copyRunRecord, withTemporaryGitWorktree } from "./git-worktree.js";
 import { createGitHubPullRequest, getGitHubPullRequest, updateGitHubPullRequestFromRun } from "./github.js";
 import { readJob, updateJob } from "./job-store.js";
 
@@ -59,15 +60,27 @@ export async function getJob(jobId, rootDir = process.cwd()) {
 
 async function processTypedJob(job, context) {
   if (job.type === "github.pr_feedback") {
-    return processGitHubPrFeedbackJob(job, context);
+    return withTemporaryGitWorktree(context.rootDir, context.exec, (worktreeRootDir) => {
+      return processGitHubPrFeedbackJob(job, {
+        ...context,
+        rootDir: worktreeRootDir,
+        stateRootDir: context.rootDir,
+      });
+    });
   }
   if (job.type === "github.issue_request") {
-    return processGitHubIssueRequestJob(job, context);
+    return withTemporaryGitWorktree(context.rootDir, context.exec, (worktreeRootDir) => {
+      return processGitHubIssueRequestJob(job, {
+        ...context,
+        rootDir: worktreeRootDir,
+        stateRootDir: context.rootDir,
+      });
+    });
   }
   throw new Error(`unsupported job type: ${job.type}`);
 }
 
-async function processGitHubPrFeedbackJob(job, { rootDir, exec, agentRunner }) {
+async function processGitHubPrFeedbackJob(job, { rootDir, stateRootDir, exec, agentRunner }) {
   const pr = await getGitHubPullRequest(job.payload.prNumber, { rootDir, exec });
   if (!pr.runId) {
     throw new Error(`pull request ${job.payload.prNumber} does not include Assembly run metadata`);
@@ -76,6 +89,7 @@ async function processGitHubPrFeedbackJob(job, { rootDir, exec, agentRunner }) {
   await exec("git", ["fetch", "origin", pr.branchName], { cwd: rootDir });
   await exec("git", ["checkout", pr.branchName], { cwd: rootDir });
   await exec("git", ["pull", "--ff-only"], { cwd: rootDir });
+  await copyRunRecord(pr.runId, stateRootDir, rootDir);
 
   const followUp = await createFollowUpRun(pr.runId, job.payload.feedback, {
     rootDir,
@@ -94,6 +108,7 @@ async function processGitHubPrFeedbackJob(job, { rootDir, exec, agentRunner }) {
     commentUrl: job.payload.commentUrl,
     exec,
   });
+  await copyRunRecord(followUp.runId, rootDir, stateRootDir);
 
   return {
     parentRunId: pr.runId,
@@ -102,7 +117,7 @@ async function processGitHubPrFeedbackJob(job, { rootDir, exec, agentRunner }) {
   };
 }
 
-async function processGitHubIssueRequestJob(job, { rootDir, exec, agentRunner }) {
+async function processGitHubIssueRequestJob(job, { rootDir, stateRootDir, exec, agentRunner }) {
   const request = [
     `GitHub issue #${job.payload.issueNumber}: ${job.payload.issueTitle}`,
     job.payload.issueBody,
@@ -122,7 +137,9 @@ async function processGitHubIssueRequestJob(job, { rootDir, exec, agentRunner })
     },
   });
 
+  await copyRunRecord(run.runId, rootDir, stateRootDir);
   const pr = await createGitHubPullRequest(run.runId, { rootDir, exec });
+  await copyRunRecord(run.runId, rootDir, stateRootDir);
   await exec("gh", [
     "issue",
     "comment",

@@ -58,6 +58,54 @@ test("handleGitHubWebhook queues @assembly PR comments", async () => {
   }
 });
 
+test("handleGitHubWebhook ignores duplicate deliveries", async () => {
+  const rootDir = await mkdtemp(path.join(tmpdir(), "assembly-webhook-duplicate-"));
+  const previousSecret = process.env.GITHUB_WEBHOOK_SECRET;
+  const rawBody = JSON.stringify({
+    action: "created",
+    issue: {
+      number: 7,
+      pull_request: {},
+    },
+    comment: {
+      id: 123,
+      body: "@assembly please address this",
+      html_url: "https://github.com/example/repo/pull/7#issuecomment-123",
+    },
+  });
+  const signature = `sha256=${createHmac("sha256", "secret").update(rawBody).digest("hex")}`;
+
+  try {
+    process.env.GITHUB_WEBHOOK_SECRET = "secret";
+    const first = await handleGitHubWebhook({
+      event: "issue_comment",
+      delivery: "delivery-1",
+      signature,
+      rawBody,
+    }, rootDir);
+    const second = await handleGitHubWebhook({
+      event: "issue_comment",
+      delivery: "delivery-1",
+      signature,
+      rawBody,
+    }, rootDir);
+
+    assert.equal(first.body.queued, true);
+    assert.deepEqual(second.body, {
+      queued: false,
+      duplicate: true,
+      jobId: first.body.jobId,
+    });
+  } finally {
+    if (previousSecret === undefined) {
+      delete process.env.GITHUB_WEBHOOK_SECRET;
+    } else {
+      process.env.GITHUB_WEBHOOK_SECRET = previousSecret;
+    }
+  }
+});
+
+
 test("normalizeGitHubWebhook creates issue request jobs for normal issue comments", () => {
   assert.deepEqual(
     normalizeGitHubWebhook("issue_comment", {
