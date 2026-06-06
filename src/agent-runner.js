@@ -3,6 +3,17 @@ import { createOpenAIAgentRunner } from "./openai-agent-runner.js";
 import { createOpenAIReviewRunner } from "./review-agent-runner.js";
 
 export async function runStubAgent(task) {
+  if (task.owner === "planner") {
+    return {
+      taskId: task.id,
+      status: "complete",
+      summary: `Planner recorded deterministic planning work for "${task.title}".`,
+      changedFiles: [],
+      artifacts: ["result.json"],
+      risks: [],
+    };
+  }
+
   return {
     taskId: task.id,
     status: "complete",

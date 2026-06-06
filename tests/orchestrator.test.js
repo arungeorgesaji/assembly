@@ -47,7 +47,7 @@ test("createRun persists request, plan, state, events, and artifacts", async () 
   assert.match(report, /# Assembly Run Report/);
   assert.match(report, /Status: complete/);
   assert.match(report, /Agent profile:/);
-  assert.match(report, /planner completed placeholder work/);
+  assert.match(report, /Planner recorded deterministic planning work/);
   assert.match(report, /Artifacts: result.json/);
 });
 
