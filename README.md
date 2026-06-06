@@ -107,7 +107,7 @@ Jobs are stored under:
 .assembly/jobs/
 ```
 
-> **Note:** Assembly stores local run state inside the `.assembly/runs/` directory within the target repository.
+> **Note:** Assembly stores local run state inside the `.assembly/runs/` directory within the target repository. Jobs are also stored locally, under `.assembly/jobs/`.
 
 ## How It Works
 
