@@ -2,6 +2,8 @@
 
 Assembly is a coordination layer for AI software engineering teams.
 
+**Assembly enhances AI-assisted software engineering by providing structure, coordination, and controlled delivery in complex codebases, enabling better team collaboration and safer code changes.**
+
 Modern coding agents are powerful, but they usually work alone with broad access to an entire codebase. Assembly introduces the structure used by effective engineering organizations: planning, ownership, specialization, review, testing, traceability, and human-controlled delivery.
 
 Assembly decomposes software development work into focused tasks, assigns those tasks to specialized agents, validates their outputs, and produces merge-ready pull requests with complete execution history.
@@ -87,6 +89,8 @@ Developers can see what each agent is doing, why a decision was made, and how th
 Assembly integrates with Slack for teams that already coordinate engineering work there.
 
 Developers can request changes, ask questions, or provide feedback from Slack. Assembly routes those requests to the relevant agents, updates the execution plan, generates new changes, refreshes validation, and updates the pull request while preserving traceability.
+
+Commands are processed promptly with clear acknowledgments in Slack threads, enabling smooth collaboration across team members and AI agents.
 
 ## Pull Request Feedback
 
@@ -429,6 +433,18 @@ node src/cli.js job inspect <job-id> --pretty
 node src/cli.js job process <job-id>
 node src/cli.js job retry <job-id>
 ```
+
+## Contributing
+
+We welcome contributions to Assembly! To contribute:
+
+- Fork the repository
+- Create a feature branch
+- Follow the coding and documentation styles
+- Test your changes (`npm test`)
+- Open a pull request with a detailed description
+
+Please ensure your changes align with the project vision and pass all verification steps.
 
 ## License
 
