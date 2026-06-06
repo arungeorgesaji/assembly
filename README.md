@@ -6,6 +6,8 @@ It runs inside a target Git repository, stores state under `.assembly/`, and can
 
 Assembly supports interaction via CLI, GitHub, and Slack requests, enabling flexible coordination of AI coding tasks across these platforms.
 
+Assembly supports CLI, GitHub, and Slack requests.
+
 ## Install
 
 Install as a dependency:
