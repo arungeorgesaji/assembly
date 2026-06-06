@@ -15,9 +15,10 @@ export function createTask({
   changePolicy = "modify",
   dependencies = [],
   acceptanceCriteria = [],
+  agentProfileId = null,
   status = TaskStatus.Pending,
 }) {
-  return {
+  const task = {
     id,
     title,
     owner,
@@ -29,12 +30,17 @@ export function createTask({
     acceptanceCriteria,
     status,
   };
+  if (agentProfileId) {
+    task.agentProfileId = agentProfileId;
+  }
+  return task;
 }
 
 export function createExecutionPlan({
   request,
   summary,
   tasks = [],
+  agentProfiles = [],
   risks = [],
   verification = [],
 }) {
@@ -42,6 +48,7 @@ export function createExecutionPlan({
     request,
     summary,
     tasks,
+    agentProfiles,
     risks,
     verification,
   };

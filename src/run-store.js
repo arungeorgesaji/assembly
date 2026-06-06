@@ -28,6 +28,7 @@ export async function initializeRun({ runId, request, plan, metadata = {} }, roo
         {
           status: "pending",
           owner: task.owner,
+          agentProfileId: task.agentProfileId,
           title: task.title,
         },
       ]),

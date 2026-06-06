@@ -16,6 +16,8 @@ test("createPlan returns a valid task graph", () => {
   );
   assert.equal(plan.tasks[1].id, "add-slack-workflow-support-implement");
   assert.equal(plan.tasks[1].changePolicy, "additive");
+  assert.equal(plan.agentProfiles.length, 3);
+  assert.ok(plan.tasks.every((task) => task.agentProfileId));
   assert.deepEqual(validatePlan(plan), []);
 });
 
@@ -25,6 +27,7 @@ test("createPlan uses a docs-specific implementation task", () => {
   assert.equal(plan.tasks[1].id, "add-readme-note-docs");
   assert.equal(plan.tasks[1].title, "Update documentation");
   assert.deepEqual(plan.tasks[1].scope.allowlist, ["README.md"]);
+  assert.match(plan.agentProfiles.find((profile) => profile.id === plan.tasks[1].agentProfileId).focus, /README\.md/);
   assert.deepEqual(plan.tasks[2].dependencies, ["add-readme-note-docs"]);
   assert.deepEqual(validatePlan(plan), []);
 });
@@ -36,6 +39,7 @@ test("createPlan uses a tests-specific implementation task", () => {
   assert.equal(plan.tasks[1].title, "Update tests");
   assert.deepEqual(plan.tasks[1].scope.paths, []);
   assert.deepEqual(plan.tasks[1].scope.allowlist, ["tests/planner.test.js"]);
+  assert.ok(plan.agentProfiles.find((profile) => profile.id === plan.tasks[1].agentProfileId).tags.includes("term:planner"));
   assert.deepEqual(validatePlan(plan), []);
 });
 
@@ -67,6 +71,7 @@ test("createPlan narrows code scopes from repository file matches", () => {
   assert.deepEqual(plan.tasks[1].scope.allowlist, ["src/github-webhooks.js"]);
   assert.equal(plan.tasks[2].id, "improve-github-webhook-duplicate-tests");
   assert.deepEqual(plan.tasks[2].scope.allowlist, ["tests/github-webhooks.test.js"]);
+  assert.notEqual(plan.tasks[1].agentProfileId, plan.tasks[2].agentProfileId);
   assert.deepEqual(plan.tasks[3].dependencies, ["improve-github-webhook-duplicate-implement", "improve-github-webhook-duplicate-tests"]);
   assert.match(plan.risks[0], /src\/github-webhooks\.js/);
   assert.deepEqual(validatePlan(plan), []);

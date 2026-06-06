@@ -21,11 +21,13 @@ export function createFinalReport({ request, plan, state, events }) {
     ...plan.tasks.flatMap((task) => {
       const taskState = state.tasks[task.id];
       const result = resultByTaskId.get(task.id);
+      const profile = plan.agentProfiles?.find((candidate) => candidate.id === task.agentProfileId);
       return [
         `### ${task.title}`,
         "",
         `- ID: ${task.id}`,
         `- Owner: ${task.owner}`,
+        `- Agent profile: ${profile?.label ?? task.agentProfileId ?? "none"}`,
         `- Status: ${taskState?.status ?? "unknown"}`,
         `- Summary: ${result?.summary ?? "No result produced."}`,
         `- Artifacts: ${(result?.artifacts ?? []).join(", ") || "none"}`,

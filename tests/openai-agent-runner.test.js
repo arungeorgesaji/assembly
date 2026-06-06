@@ -15,7 +15,16 @@ test("OpenAI agent runner posts task and parses structured output", async () => 
     id: "task-1",
     title: "Do scoped work",
     owner: "implementation-agent",
+    agentProfileId: "agent-impl-src",
     scope: { paths: ["src/"], allowlist: [], denylist: [".env"] },
+  };
+  const agentProfile = {
+    id: "agent-impl-src",
+    dispatchOwner: "implementation-agent",
+    focus: "src/",
+    ownedPaths: ["src/"],
+    deniedPaths: [".env"],
+    instructions: ["Work only inside: src/."],
   };
 
   try {
@@ -29,6 +38,7 @@ test("OpenAI agent runner posts task and parses structured output", async () => 
       assert.equal(body.text.format.strict, true);
       const userPayload = JSON.parse(body.input[1].content[0].text);
       assert.equal(userPayload.request, "Test request");
+      assert.deepEqual(userPayload.agentProfile, agentProfile);
       assert.equal(userPayload.scopedFiles[0].path, "src/task.js");
 
       return {
@@ -54,7 +64,7 @@ test("OpenAI agent runner posts task and parses structured output", async () => 
       baseUrl: "https://example.test/v1",
     });
 
-    assert.deepEqual(await runner(task, { rootDir, plan: { request: "Test request", verification: [] } }), {
+    assert.deepEqual(await runner(task, { rootDir, plan: { request: "Test request", verification: [], agentProfiles: [agentProfile] } }), {
       taskId: "task-1",
       status: "complete",
       summary: "Structured result.",

@@ -18,6 +18,9 @@ test("createRun persists request, plan, state, events, and artifacts", async () 
   assert.equal(run.request.request, "Add persisted workflow runs");
   assert.equal(run.state.status, "complete");
   assert.equal(run.plan.tasks.length, 3);
+  assert.equal(run.plan.agentProfiles.length, 3);
+  assert.ok(run.plan.tasks.every((task) => task.agentProfileId));
+  assert.ok(Object.values(run.state.tasks).every((task) => task.agentProfileId));
   assert.deepEqual(
     Object.values(run.state.tasks).map((task) => task.status),
     ["complete", "complete", "complete"],
@@ -43,6 +46,7 @@ test("createRun persists request, plan, state, events, and artifacts", async () 
   const report = await readFile(path.join(getRunDir(runId, rootDir), "final-report.md"), "utf8");
   assert.match(report, /# Assembly Run Report/);
   assert.match(report, /Status: complete/);
+  assert.match(report, /Agent profile:/);
   assert.match(report, /planner completed placeholder work/);
   assert.match(report, /Artifacts: result.json/);
 });

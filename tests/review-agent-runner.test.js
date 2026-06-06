@@ -20,9 +20,21 @@ test("OpenAI review runner posts run context and parses structured review", asyn
         id: "review-docs-review",
         title: "Verify and review output",
         owner: "review-agent",
+        agentProfileId: "agent-review-docs",
         scope: { paths: ["tests/"], allowlist: ["README.md"], denylist: [".env"] },
         dependencies: [],
         acceptanceCriteria: ["Review result is structured."],
+      },
+    ],
+    agentProfiles: [
+      {
+        id: "agent-review-docs",
+        dispatchOwner: "review-agent",
+        focus: "tests/, README.md",
+        ownedPaths: ["tests/", "README.md"],
+        deniedPaths: [".env"],
+        instructions: ["Review ownership boundaries."],
+        taskIds: ["review-docs-review"],
       },
     ],
     verification: [],
@@ -36,6 +48,7 @@ test("OpenAI review runner posts run context and parses structured review", asyn
 
       assert.equal(url, "https://example.test/v1/responses");
       assert.equal(userPayload.request, "Review docs");
+      assert.equal(userPayload.agentProfile.id, "agent-review-docs");
       assert.equal(userPayload.scopedFiles[0].path, "README.md");
 
       return {

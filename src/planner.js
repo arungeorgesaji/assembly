@@ -1,3 +1,4 @@
+import { attachAgentProfiles } from "./agent-profiles.js";
 import { createExecutionPlan, createTask } from "./models.js";
 import { inspectRepository } from "./repo-inspector.js";
 
@@ -18,7 +19,7 @@ export function createPlan(request, { rootDir = process.cwd(), repoContext = ins
     targetContext,
   });
 
-  const tasks = [
+  const baseTasks = [
     createTask({
       id: `${slug}-plan`,
       title: "Define implementation plan",
@@ -52,11 +53,13 @@ export function createPlan(request, { rootDir = process.cwd(), repoContext = ins
       ],
     }),
   ];
+  const { tasks, agentProfiles } = attachAgentProfiles(baseTasks);
 
   return createExecutionPlan({
     request: normalizedRequest,
     summary: `Coordinate delivery for: ${normalizedRequest}`,
     tasks,
+    agentProfiles,
     risks: [
       targetContext.files.length > 0
         ? `Planner inferred likely target files: ${targetContext.files.join(", ")}.`

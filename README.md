@@ -312,6 +312,8 @@ The local planner is deterministic but request-aware:
 
 When `ASSEMBLY_AGENT_PROVIDER=openai` is enabled, OpenAI currently handles implementation and review tasks. Planner tasks remain deterministic. Review runs after implementation verification, inspects the run state and artifacts, and can mark the workflow `complete`, `blocked`, or `failed`.
 
+Plans also include dynamic agent profiles. These are not predefined personas; Assembly derives them from each task's owner, scope, denylist, and change policy. Tasks keep a stable `owner` for dispatch compatibility and reference an `agentProfileId` for the scoped delegation contract. The profile is passed to implementation and review agents so they can honor the exact owned paths without requiring a hardcoded list such as frontend/test/docs agents.
+
 ## Approval Modes
 
 Assembly validates agent output before any edit is applied, then passes the result through an approval gate:

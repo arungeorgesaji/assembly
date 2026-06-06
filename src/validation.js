@@ -1,3 +1,4 @@
+import { validateAgentProfiles } from "./agent-profiles.js";
 import { validateScope } from "./scope.js";
 
 export function validatePlan(plan) {
@@ -25,6 +26,8 @@ export function validatePlan(plan) {
       }
     }
   }
+
+  errors.push(...validateAgentProfiles(plan));
 
   return errors;
 }

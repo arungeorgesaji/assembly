@@ -43,6 +43,7 @@ export function createOpenAIReviewRunner(config = getOpenAIConfig()) {
     const rootDir = runContext.rootDir ?? process.cwd();
     const taskContext = await buildTaskContext(task, rootDir);
     const run = await readRun(runContext.runId, rootDir);
+    const agentProfile = run.plan.agentProfiles?.find((profile) => profile.id === task.agentProfileId);
 
     const response = await fetch(`${config.baseUrl}/responses`, {
       method: "POST",
@@ -61,6 +62,7 @@ export function createOpenAIReviewRunner(config = getOpenAIConfig()) {
                 text:
                   "You are an Assembly review agent. Return only JSON matching the schema. " +
                   "Review the completed task results, changed files, artifacts, and verification output. " +
+                  "If task.agentProfileId is present, use the matching agentProfile to check ownership boundaries. " +
                   "Return status complete when the work is acceptable. Return blocked for human input needed. " +
                   "Return failed for concrete correctness, scope, security, or verification problems. " +
                   "Do not edit files; patch must be empty and fileUpdates must be empty.",
@@ -76,6 +78,7 @@ export function createOpenAIReviewRunner(config = getOpenAIConfig()) {
                   {
                     request: run.plan.request,
                     task,
+                    agentProfile,
                     state: run.state,
                     events: run.events,
                     scopedFiles: taskContext.files,
@@ -122,4 +125,3 @@ function findOutputText(payload) {
   }
   return null;
 }
-

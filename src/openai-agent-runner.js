@@ -45,6 +45,7 @@ export function createOpenAIAgentRunner(config = getOpenAIConfig()) {
   return async function runOpenAIAgent(task, runContext = {}) {
     const rootDir = runContext.rootDir ?? process.cwd();
     const taskContext = await buildTaskContext(task, rootDir);
+    const agentProfile = runContext.plan?.agentProfiles?.find((profile) => profile.id === task.agentProfileId);
     const response = await fetch(`${config.baseUrl}/responses`, {
       method: "POST",
       headers: {
@@ -62,6 +63,7 @@ export function createOpenAIAgentRunner(config = getOpenAIConfig()) {
                 text:
                   "You are an Assembly task agent. Return only JSON matching the supplied schema. " +
                   "You handle implementation tasks only. You may only edit files inside the task scope. " +
+                  "If task.agentProfileId is present, follow the matching agentProfile instructions as the task's dynamic delegation contract. " +
                   "Prefer fileUpdates for edits: return the full replacement content for each changed file. " +
                   "For fileUpdates, preserve all unrelated existing content exactly and make the smallest requested edit. " +
                   "When task.changePolicy is additive, the updated file must keep every existing line in the same order and only insert new lines. " +
@@ -82,6 +84,7 @@ export function createOpenAIAgentRunner(config = getOpenAIConfig()) {
                   {
                     request: runContext.plan?.request,
                     task,
+                    agentProfile,
                     verification: runContext.plan?.verification ?? [],
                     scopedFiles: taskContext.files,
                     contextLimits: taskContext.limits,
