@@ -169,6 +169,30 @@ node src/cli.js status <run-id>
 node src/cli.js inspect <run-id> --pretty
 ```
 
+Create a follow-up run from local feedback:
+
+```bash
+node src/cli.js follow-up <run-id> "Address this feedback" --pretty
+```
+
+Create a GitHub pull request from a completed run:
+
+```bash
+node src/cli.js github create-pr <run-id>
+```
+
+Create a follow-up run from a GitHub issue or PR comment:
+
+```bash
+node src/cli.js github comment-to-follow-up <run-id> <comment-id>
+```
+
+GitHub commands currently use the GitHub CLI. Authenticate first with:
+
+```bash
+gh auth login
+```
+
 Each run writes:
 
 ```text
@@ -211,6 +235,9 @@ The first working slice includes:
 - Optional OpenAI review agent that inspects completed task results and verification output
 - Local `.env` loading for `OPENAI_API_KEY` and `OPENAI_MODEL`
 - Approval gate before applying edits, defaulting to `ASSEMBLY_APPROVAL_MODE=auto`
+- Local follow-up runs linked to parent runs
+- GitHub CLI adapter for creating pull requests from completed runs
+- GitHub comment adapter for turning comments into follow-up runs
 - Agent result validation for task id, terminal status, summary, changed files, artifacts, and risks
 - Changed-file validation against each task's assigned scope
 - Unified diff patch validation and local application through `git apply`
@@ -306,6 +333,27 @@ Assembly validates agent output before any edit is applied, then passes the resu
 
 Local CLI defaults to `auto`. Slack and GitHub flows can use `manual` later for human approval before delivery.
 
+## Follow-Up And GitHub Flow
+
+Follow-up requests create new runs linked to a parent run. The follow-up request includes:
+
+- parent run id
+- original request
+- feedback text
+- optional source metadata
+
+GitHub comments use the same follow-up engine. The current GitHub adapter is CLI-based:
+
+- `github comment-to-follow-up <run-id> <comment-id>` fetches a comment with `gh api` and creates a follow-up run
+- `github create-pr <run-id>` creates a branch, commits current changes, pushes, and opens a PR with the run report
+
+Webhook handling is intentionally not included yet. Future webhook support should validate the webhook signature, enqueue the comment event, then call the same follow-up path.
+
 ## License
 
 See [LICENSE](LICENSE).
+
+## Note Added
+
+This note was added to address the request for an additional documentation note in README.md.
+It serves as a demonstration of an additive documentation change without altering any existing unrelated content.
