@@ -1,10 +1,10 @@
 {
-  "name": "assembly",
+  "name": "@arungeorgesaji/assembly",
   "version": "0.1.0",
   "description": "A coordination layer for AI software engineering teams.",
   "type": "module",
   "bin": {
-    "assembly": "./src/cli.js"
+    "assembly": "src/cli.js"
   },
   "files": [
     "src/*.js",

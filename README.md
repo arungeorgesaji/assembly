@@ -115,39 +115,37 @@ The goal is not to replace engineers. The goal is to make AI-assisted developmen
 
 ## Getting Started
 
-Assembly currently ships as a local Node.js CLI. The deterministic stub runner works without API keys; provider-backed implementation and review require an OpenAI API key.
+Assembly ships as a Node.js CLI. The deterministic stub runner works without API keys; provider-backed implementation and review require an OpenAI API key.
 
 Prerequisites:
 
 - Node.js 20 or newer
 
-Install dependencies:
+Install globally:
+
+```bash
+npm install -g @arungeorgesaji/assembly
+```
+
+Initialize a target repository:
+
+```bash
+cd my-repo
+assembly init
+assembly doctor
+assembly webhook --port 3000
+```
+
+Assembly resolves the target to the Git repository root, even when launched from a subdirectory. Use `--repo <path>` to target another checkout explicitly.
+
+For local development on Assembly itself:
 
 ```bash
 npm install
-```
-
-Link the CLI while developing locally:
-
-```bash
 npm link
 ```
 
-After linking, run `assembly` from the repository you want Assembly to modify. Assembly resolves the target to the Git repository root, even when launched from a subdirectory. Use `--repo <path>` to target another checkout explicitly.
-
-Check the linked CLI:
-
-```bash
-assembly plan "Add Slack workflow support" --pretty
-```
-
-Configure optional OpenAI execution:
-
-```bash
-cp .env.example .env
-```
-
-Then set:
+`assembly init` creates `.assembly/` and a starter `.env`. Fill in values as needed:
 
 ```text
 ASSEMBLY_AGENT_PROVIDER=openai

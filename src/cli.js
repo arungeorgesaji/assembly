@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 
+import { realpathSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { createPlan } from "./planner.js";
 import { createRun } from "./orchestrator.js";
 import { createFollowUpRun } from "./follow-up.js";
 import { createGitHubPullRequest, getGitHubComment } from "./github.js";
+import { formatInitResult, initializeAssembly } from "./init.js";
 import { processJob } from "./job-worker.js";
 import { listJobs, readJob, resetJobForRetry } from "./job-store.js";
 import { readRun } from "./run-store.js";
@@ -19,18 +24,21 @@ export async function main(argv = process.argv.slice(2), io = process) {
     for (const error of errors) {
       io.stderr.write(`error: ${error}\n`);
     }
-    io.stderr.write("usage: assembly [--repo <path>] <plan|run|follow-up|status|inspect|github|job|webhook|doctor> ...\n");
+    io.stderr.write("usage: assembly [--repo <path>] <init|plan|run|follow-up|status|inspect|github|job|webhook|doctor> ...\n");
     return 2;
   }
   const rootDir = await resolveRootDir({ repo });
   await loadEnv(rootDir);
   const [command, ...args] = resolvedArgv;
 
-  if (!["plan", "run", "follow-up", "status", "inspect", "github", "job", "webhook", "doctor"].includes(command)) {
-    io.stderr.write("usage: assembly [--repo <path>] <plan|run|follow-up|status|inspect|github|job|webhook|doctor> ...\n");
+  if (!["init", "plan", "run", "follow-up", "status", "inspect", "github", "job", "webhook", "doctor"].includes(command)) {
+    io.stderr.write("usage: assembly [--repo <path>] <init|plan|run|follow-up|status|inspect|github|job|webhook|doctor> ...\n");
     return 2;
   }
 
+  if (command === "init") {
+    return handleInit(args, io, rootDir);
+  }
   if (command === "plan") {
     return handlePlan(args, io, rootDir);
   }
@@ -56,6 +64,25 @@ export async function main(argv = process.argv.slice(2), io = process) {
     return handleDoctor(args, io, rootDir);
   }
   return handleWebhook(args, io, rootDir);
+}
+
+async function handleInit(args, io, rootDir) {
+  const json = args.includes("--json");
+  const force = args.includes("--force");
+  const unknown = args.filter((arg) => !["--json", "--force"].includes(arg));
+  if (unknown.length > 0) {
+    io.stderr.write("usage: assembly init [--force] [--json]\n");
+    return 2;
+  }
+
+  try {
+    const result = await initializeAssembly({ rootDir, force });
+    io.stdout.write(json ? `${JSON.stringify(result, null, 2)}\n` : formatInitResult(result));
+    return 0;
+  } catch (error) {
+    io.stderr.write(`error: ${error.message}\n`);
+    return 1;
+  }
 }
 
 function handlePlan(args, io, rootDir) {
@@ -335,6 +362,20 @@ function describeJobTarget(job) {
   return "";
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+function isDirectExecution() {
+  if (!process.argv[1]) {
+    return false;
+  }
+  if (path.basename(process.argv[1]) === "assembly") {
+    return true;
+  }
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]);
+  } catch {
+    return false;
+  }
+}
+
+if (isDirectExecution()) {
   process.exitCode = await main();
 }
