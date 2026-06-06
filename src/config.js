@@ -35,6 +35,14 @@ export function getGitHubWebhookSecret() {
   return process.env.GITHUB_WEBHOOK_SECRET || "";
 }
 
+export function getSlackSigningSecret() {
+  return process.env.SLACK_SIGNING_SECRET || "";
+}
+
+export function getSlackBotToken() {
+  return process.env.SLACK_BOT_TOKEN || "";
+}
+
 export function getOpenAIConfig() {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {

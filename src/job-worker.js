@@ -6,6 +6,8 @@ import { createFollowUpRun } from "./follow-up.js";
 import { copyRunRecord, withTemporaryGitWorktree } from "./git-worktree.js";
 import { createGitHubPullRequest, getGitHubPullRequest, updateGitHubPullRequestFromRun } from "./github.js";
 import { readJob, updateJob } from "./job-store.js";
+import { postSlackMessage } from "./slack.js";
+import { readSlackThreadState, writeSlackThreadState } from "./slack-thread-store.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -22,12 +24,41 @@ export async function processJob(jobId, { rootDir = process.cwd(), exec = execFi
   } catch (error) {
     const latestJob = await readJob(jobId, rootDir).catch(() => job);
     await notifyGitHubJobFailure(latestJob, error, { rootDir, exec });
+    await notifySlackJobFailure(latestJob, error);
     return updateJob(jobId, {
       status: "failed",
       failedAt: new Date().toISOString(),
       error: error.message,
     }, rootDir);
   }
+}
+
+async function notifySlackJobFailure(job, error) {
+  if (job.type !== "slack.request") {
+    return;
+  }
+
+  try {
+    await postSlackMessage({
+      channel: job.payload.channel,
+      threadTs: job.payload.threadTs,
+      text: formatSlackJobFailureMessage(job, error),
+    });
+  } catch {
+    // Keep the original job failure as the source of truth.
+  }
+}
+
+export function formatSlackJobFailureMessage(job, error) {
+  const retryable = isRetryableJobFailure(error);
+  return [
+    "Assembly could not complete this Slack request.",
+    `Job: ${job.id}`,
+    job.runId ? `Run: ${job.runId}` : null,
+    `Retryable: ${retryable ? "yes" : "no"}`,
+    `Error: ${error.message}`,
+    `Suggested next action: ${getFailureSuggestedAction(job, error, retryable)}`,
+  ].filter(Boolean).join("\n");
 }
 
 async function notifyGitHubJobFailure(job, error, { rootDir, exec }) {
@@ -112,7 +143,149 @@ async function processTypedJob(job, context) {
       });
     });
   }
+  if (job.type === "slack.request") {
+    return withTemporaryGitWorktree(context.rootDir, context.exec, (worktreeRootDir) => {
+      return processSlackRequestJob(job, {
+        ...context,
+        rootDir: worktreeRootDir,
+        stateRootDir: context.rootDir,
+      });
+    });
+  }
   throw new Error(`unsupported job type: ${job.type}`);
+}
+
+async function processSlackRequestJob(job, { rootDir, stateRootDir, exec, agentRunner }) {
+  const threadRef = getSlackThreadRef(job);
+  const threadState = await readSlackThreadState(threadRef, stateRootDir);
+  if (threadState?.pullRequest?.number) {
+    return processSlackPrFollowUpJob(job, threadState, { rootDir, stateRootDir, exec, agentRunner });
+  }
+  return processSlackNewPullRequestJob(job, { rootDir, stateRootDir, exec, agentRunner });
+}
+
+async function processSlackNewPullRequestJob(job, { rootDir, stateRootDir, exec, agentRunner }) {
+  const request = [
+    `Slack request from <@${job.payload.user}> in ${job.payload.channel}.`,
+    job.payload.text,
+  ].filter(Boolean).join("\n\n");
+
+  const run = await createRun(request, {
+    rootDir,
+    agentRunner,
+    metadata: {
+      source: {
+        provider: "slack",
+        kind: job.payload.kind,
+        eventId: job.payload.eventId,
+        channel: job.payload.channel,
+        user: job.payload.user,
+        threadTs: job.payload.threadTs,
+      },
+    },
+  });
+  await updateJob(job.id, { runId: run.runId }, stateRootDir);
+  await copyRunRecord(run.runId, rootDir, stateRootDir);
+  const pr = await createGitHubPullRequest(run.runId, { rootDir, exec });
+  await copyRunRecord(run.runId, rootDir, stateRootDir);
+  const prNumber = extractPullRequestNumber(pr.url);
+  await writeSlackThreadState({
+    ...getSlackThreadRef(job),
+    runId: run.runId,
+    pullRequest: {
+      number: prNumber,
+      url: pr.url,
+      branchName: pr.branchName,
+    },
+  }, stateRootDir);
+
+  await postSlackMessage({
+    channel: job.payload.channel,
+    threadTs: job.payload.threadTs,
+    text: `Assembly created ${pr.url} for run ${run.runId}.`,
+  });
+
+  return {
+    runId: run.runId,
+    channel: job.payload.channel,
+    threadTs: job.payload.threadTs,
+    pullRequest: pr,
+  };
+}
+
+async function processSlackPrFollowUpJob(job, threadState, { rootDir, stateRootDir, exec, agentRunner }) {
+  const pr = await getGitHubPullRequest(threadState.pullRequest.number, { rootDir, exec });
+  if (!pr.runId) {
+    throw new Error(`pull request ${threadState.pullRequest.number} does not include Assembly run metadata`);
+  }
+  await updateJob(job.id, { parentRunId: pr.runId }, stateRootDir);
+
+  await exec("git", ["fetch", "origin", pr.branchName], { cwd: rootDir });
+  await exec("git", ["checkout", pr.branchName], { cwd: rootDir });
+  await exec("git", ["pull", "--ff-only"], { cwd: rootDir });
+  await copyRunRecord(pr.runId, stateRootDir, rootDir);
+
+  const followUp = await createFollowUpRun(pr.runId, job.payload.text, {
+    rootDir,
+    agentRunner,
+    source: {
+      provider: "slack",
+      kind: job.payload.kind,
+      eventId: job.payload.eventId,
+      channel: job.payload.channel,
+      user: job.payload.user,
+      threadTs: job.payload.threadTs,
+    },
+  });
+  await updateJob(job.id, { runId: followUp.runId }, stateRootDir);
+
+  const delivery = await updateGitHubPullRequestFromRun(followUp.runId, {
+    rootDir,
+    branchName: pr.branchName,
+    prNumber: pr.number,
+    exec,
+  });
+  await copyRunRecord(followUp.runId, rootDir, stateRootDir);
+  await writeSlackThreadState({
+    ...getSlackThreadRef(job),
+    runId: followUp.runId,
+    parentRunId: pr.runId,
+    pullRequest: {
+      number: pr.number,
+      url: threadState.pullRequest.url,
+      branchName: pr.branchName,
+    },
+  }, stateRootDir);
+
+  await postSlackMessage({
+    channel: job.payload.channel,
+    threadTs: job.payload.threadTs,
+    text: `Assembly updated PR #${pr.number} with run ${followUp.runId}.`,
+  });
+
+  return {
+    parentRunId: pr.runId,
+    followUpRunId: followUp.runId,
+    pullRequest: {
+      number: pr.number,
+      url: threadState.pullRequest.url,
+      branchName: pr.branchName,
+    },
+    delivery,
+  };
+}
+
+function getSlackThreadRef(job) {
+  return {
+    teamId: job.payload.teamId,
+    channel: job.payload.channel,
+    threadTs: job.payload.threadTs,
+  };
+}
+
+function extractPullRequestNumber(url) {
+  const match = String(url ?? "").match(/\/pull\/(\d+)(?:\b|$)/);
+  return match ? Number(match[1]) : null;
 }
 
 async function processGitHubPrFeedbackJob(job, { rootDir, stateRootDir, exec, agentRunner }) {

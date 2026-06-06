@@ -223,7 +223,7 @@ The first working slice includes:
 - Final report generation for every run
 - Status and inspect commands for persisted runs
 
-Repository patch execution, Slack integration, pull request automation, and stronger provider-backed coding behavior are planned next layers.
+Stronger provider-backed coding behavior, richer Slack command syntax, and production deployment hardening are planned next layers.
 
 ## Agent Result Contract
 
@@ -371,15 +371,28 @@ Configure a GitHub webhook:
   - pull request review comments
   - pull request reviews
 
+Configure a Slack app:
+
+- Enable Event Subscriptions
+- Request URL: `https://<your-tunnel>/slack/events`
+- Subscribe to bot events:
+  - `app_mention`
+  - `message.im`
+- Install the app to your workspace
+- Copy the signing secret to `SLACK_SIGNING_SECRET`
+- Copy the bot token to `SLACK_BOT_TOKEN`
+
 Set local environment:
 
 ```text
 GITHUB_WEBHOOK_SECRET=your_webhook_secret
+SLACK_SIGNING_SECRET=your_slack_signing_secret
+SLACK_BOT_TOKEN=xoxb-your-slack-bot-token
 ASSEMBLY_AGENT_PROVIDER=openai
 ASSEMBLY_APPROVAL_MODE=auto
 ```
 
-Webhook events must include `@assembly` in the issue, comment, or review body.
+GitHub webhook events must include `@assembly` in the issue, comment, or review body. Slack requests can come from an app mention or direct message.
 
 Supported events:
 
@@ -405,6 +418,8 @@ Webhook handling is asynchronous:
 12. comment back on the issue or PR
 
 If a GitHub job fails, Assembly comments back on the issue or PR with the job id, run id when one was created, retryability, the failure reason, and a suggested next action.
+
+Slack handling verifies Slack signatures, answers URL verification challenges, deduplicates Slack event ids, and queues `slack.request` jobs. The first request in a Slack thread creates an Assembly run, opens a GitHub PR, stores the Slack thread to PR mapping under `.assembly/slack-threads/`, and replies in the originating thread with the PR link. Later requests in that same Slack thread become follow-up runs against the same PR branch, refresh the PR body, and reply in the thread. If a Slack job fails, Assembly replies in the thread with the job id, run id when one was created, retryability, the failure reason, and a suggested next action.
 
 For manual retry/debugging:
 

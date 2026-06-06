@@ -5,7 +5,9 @@ import { createPlan } from "../src/planner.js";
 import { validatePlan } from "../src/validation.js";
 
 test("createPlan returns a valid task graph", () => {
-  const plan = createPlan("Add Slack workflow support");
+  const plan = createPlan("Add Slack workflow support", {
+    repoContext: genericRepoContext(),
+  });
 
   assert.equal(plan.request, "Add Slack workflow support");
   assert.deepEqual(
@@ -73,3 +75,26 @@ test("createPlan narrows code scopes from repository file matches", () => {
 test("createPlan rejects an empty request", () => {
   assert.throws(() => createPlan("   "), /request cannot be empty/);
 });
+
+function genericRepoContext() {
+  return {
+    language: "javascript",
+    verificationCommands: ["npm test"],
+    sourceFiles: ["src/app.js"],
+    testFiles: ["tests/app.test.js"],
+    documentationFiles: ["README.md"],
+    configFiles: ["package.json"],
+    suggestedScopes: {
+      implementation: {
+        paths: ["src/", "tests/"],
+        allowlist: ["package.json", "README.md"],
+        denylist: [".env", ".git/"],
+      },
+      review: {
+        paths: ["tests/", ".assembly/"],
+        allowlist: ["README.md"],
+        denylist: [".env", ".git/"],
+      },
+    },
+  };
+}

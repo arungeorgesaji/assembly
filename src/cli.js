@@ -239,7 +239,12 @@ function handleWebhook(args, io) {
 
   const server = startWebhookServer({ port });
   server.on("listening", () => {
-    io.stdout.write(`Assembly webhook server listening on http://127.0.0.1:${port}/github/webhook\n`);
+    io.stdout.write([
+      `Assembly webhook server listening on http://127.0.0.1:${port}`,
+      `GitHub: http://127.0.0.1:${port}/github/webhook`,
+      `Slack:  http://127.0.0.1:${port}/slack/events`,
+      "",
+    ].join("\n"));
   });
   server.on("error", (error) => {
     io.stderr.write(`error: unable to start webhook server: ${error.message}\n`);

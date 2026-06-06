@@ -3,24 +3,20 @@ import http from "node:http";
 import { loadEnv } from "./config.js";
 import { handleGitHubWebhook } from "./github-webhooks.js";
 import { processJob } from "./job-worker.js";
+import { handleSlackWebhook } from "./slack-webhooks.js";
 
 export function startWebhookServer({ port = 3000, host = "127.0.0.1", rootDir = process.cwd(), processJobs = true } = {}) {
   const server = http.createServer(async (request, response) => {
     await loadEnv(rootDir);
 
-    if (request.method !== "POST" || request.url !== "/github/webhook") {
+    if (request.method !== "POST" || !["/github/webhook", "/slack/events"].includes(request.url)) {
       response.writeHead(404, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ error: "not found" }));
       return;
     }
 
     const rawBody = await readRequestBody(request);
-    const result = await handleGitHubWebhook({
-      event: request.headers["x-github-event"],
-      delivery: request.headers["x-github-delivery"],
-      signature: request.headers["x-hub-signature-256"],
-      rawBody,
-    }, rootDir).catch((error) => {
+    const result = await routeWebhook(request, rawBody, rootDir).catch((error) => {
       console.error(`webhook error: ${error.stack ?? error.message}`);
       return { status: 500, body: { error: error.message } };
     });
@@ -39,6 +35,23 @@ export function startWebhookServer({ port = 3000, host = "127.0.0.1", rootDir = 
 
   server.listen(port, host);
   return server;
+}
+
+function routeWebhook(request, rawBody, rootDir) {
+  if (request.url === "/github/webhook") {
+    return handleGitHubWebhook({
+      event: request.headers["x-github-event"],
+      delivery: request.headers["x-github-delivery"],
+      signature: request.headers["x-hub-signature-256"],
+      rawBody,
+    }, rootDir);
+  }
+
+  return handleSlackWebhook({
+    signature: request.headers["x-slack-signature"],
+    timestamp: request.headers["x-slack-request-timestamp"],
+    rawBody,
+  }, rootDir);
 }
 
 function readRequestBody(request) {
