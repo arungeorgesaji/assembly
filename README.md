@@ -53,7 +53,7 @@ Assembly resolves the target to the Git repository root. To target another check
 assembly --repo /path/to/repo doctor
 ```
 
-**Note:** CLI demo requests create pull requests before merging. Additionally, same thread Slack follow-ups are supported to help maintain context and coordination.
+**Note:** CLI demo requests create pull requests before merging. Additionally, same thread Slack follow-ups are supported as well to help maintain context and coordination.
 
 ## Configuration
 
