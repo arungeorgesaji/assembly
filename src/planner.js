@@ -8,6 +8,13 @@ export function createPlan(request, { rootDir = process.cwd(), repoContext = ins
   const reviewScope = repoContext.suggestedScopes.review;
   const verification = repoContext.verificationCommands;
   const changePolicy = normalizedRequest.toLowerCase().startsWith("add ") ? "additive" : "modify";
+  const requestKind = classifyRequest(normalizedRequest);
+  const implementationTasks = createImplementationTasks({
+    slug,
+    requestKind,
+    implementationScope,
+    changePolicy,
+  });
 
   const tasks = [
     createTask({
@@ -27,6 +34,111 @@ export function createPlan(request, { rootDir = process.cwd(), repoContext = ins
         "Plan identifies blockers, dependencies, and verification steps.",
       ],
     }),
+    ...implementationTasks,
+    createTask({
+      id: `${slug}-verify`,
+      title: "Verify and review output",
+      owner: "review-agent",
+      description:
+        "Run relevant checks, review the diff, and summarize risks before human handoff.",
+      scope: reviewScope,
+      dependencies: implementationTasks.map((task) => task.id),
+      acceptanceCriteria: [
+        "Automated checks pass or failures are documented.",
+        "Review notes include known risks and follow-up recommendations.",
+      ],
+    }),
+  ];
+
+  return createExecutionPlan({
+    request: normalizedRequest,
+    summary: `Coordinate delivery for: ${normalizedRequest}`,
+    tasks,
+    risks: [
+      "Planner is deterministic and request-aware; deeper semantic decomposition is still evolving.",
+    ],
+    verification,
+  });
+}
+
+function classifyRequest(request) {
+  const lower = request.toLowerCase();
+  if (/\b(readme|docs?|documentation)\b/.test(lower)) {
+    return "docs";
+  }
+  if (/\b(test|tests|coverage|spec)\b/.test(lower)) {
+    return "tests";
+  }
+  if (/\b(refactor|cleanup|rename)\b/.test(lower)) {
+    return "refactor";
+  }
+  return "code";
+}
+
+function createImplementationTasks({ slug, requestKind, implementationScope, changePolicy }) {
+  if (requestKind === "docs") {
+    return [
+      createTask({
+        id: `${slug}-docs`,
+        title: "Update documentation",
+        owner: "implementation-agent",
+        description: "Make the requested documentation change while preserving unrelated content.",
+        scope: {
+          paths: [],
+          allowlist: ["README.md"],
+          denylist: [".env", ".env.*", ".git/", ".assembly/"],
+        },
+        changePolicy,
+        dependencies: [`${slug}-plan`],
+        acceptanceCriteria: [
+          "Documentation change directly addresses the request.",
+          "Unrelated documentation content remains intact.",
+        ],
+      }),
+    ];
+  }
+
+  if (requestKind === "tests") {
+    return [
+      createTask({
+        id: `${slug}-tests`,
+        title: "Update tests",
+        owner: "implementation-agent",
+        description: "Add or update tests for the requested behavior.",
+        scope: {
+          paths: ["tests/"],
+          allowlist: ["package.json", "package-lock.json"],
+          denylist: [".env", ".env.*", ".git/", ".assembly/"],
+        },
+        changePolicy,
+        dependencies: [`${slug}-plan`],
+        acceptanceCriteria: [
+          "Tests cover the requested behavior or regression.",
+          "Test changes stay within the assigned test scope.",
+        ],
+      }),
+    ];
+  }
+
+  if (requestKind === "refactor") {
+    return [
+      createTask({
+        id: `${slug}-refactor`,
+        title: "Refactor implementation",
+        owner: "implementation-agent",
+        description: "Refactor the relevant implementation while preserving behavior.",
+        scope: implementationScope,
+        changePolicy,
+        dependencies: [`${slug}-plan`],
+        acceptanceCriteria: [
+          "Behavior remains unchanged unless the request explicitly says otherwise.",
+          "Refactor stays inside the assigned ownership scope.",
+        ],
+      }),
+    ];
+  }
+
+  return [
     createTask({
       id: `${slug}-implement`,
       title: "Implement requested change",
@@ -41,30 +153,7 @@ export function createPlan(request, { rootDir = process.cwd(), repoContext = ins
         "Implementation satisfies the request and preserves existing behavior.",
       ],
     }),
-    createTask({
-      id: `${slug}-verify`,
-      title: "Verify and review output",
-      owner: "review-agent",
-      description:
-        "Run relevant checks, review the diff, and summarize risks before human handoff.",
-      scope: reviewScope,
-      dependencies: [`${slug}-implement`],
-      acceptanceCriteria: [
-        "Automated checks pass or failures are documented.",
-        "Review notes include known risks and follow-up recommendations.",
-      ],
-    }),
   ];
-
-  return createExecutionPlan({
-    request: normalizedRequest,
-    summary: `Coordinate delivery for: ${normalizedRequest}`,
-    tasks,
-    risks: [
-      "This initial planner uses deterministic templates until provider-backed agents are integrated.",
-    ],
-    verification,
-  });
 }
 
 function normalizeRequest(request) {

@@ -143,6 +143,7 @@ Then set:
 
 ```text
 ASSEMBLY_AGENT_PROVIDER=openai
+ASSEMBLY_APPROVAL_MODE=auto
 OPENAI_API_KEY=your_api_key
 OPENAI_MODEL=gpt-4.1-mini
 ```
@@ -199,14 +200,17 @@ The first working slice includes:
 - A structured execution plan model
 - Task ownership, dependencies, acceptance criteria, risks, and verification steps
 - Task folder/file scopes with allowlists and denylists
-- A deterministic planner for turning a change request into a task graph
+- A deterministic request-aware planner for turning a change request into a task graph
+- Request-specific task shapes for documentation, tests, refactors, and general code changes
 - Lightweight repository inspection for package type and verification commands
 - Plan validation for missing owners, missing acceptance criteria, and invalid dependencies
 - A CLI that emits plan JSON
 - A local run store under `.assembly/runs/<run-id>/`
 - A stub agent runner that produces per-task artifacts
 - Optional OpenAI agent runner selected with `ASSEMBLY_AGENT_PROVIDER=openai`
+- Optional OpenAI review agent that inspects completed task results and verification output
 - Local `.env` loading for `OPENAI_API_KEY` and `OPENAI_MODEL`
+- Approval gate before applying edits, defaulting to `ASSEMBLY_APPROVAL_MODE=auto`
 - Agent result validation for task id, terminal status, summary, changed files, artifacts, and risks
 - Changed-file validation against each task's assigned scope
 - Unified diff patch validation and local application through `git apply`
@@ -280,6 +284,27 @@ For model-generated edits, Assembly also supports `fileUpdates`:
 ```
 
 Assembly validates each update path against task scope before writing it. For requests that begin with `Add`, implementation tasks use an additive change policy: existing file lines must remain in the same order, so accidental rewrites or removals fail validation.
+
+## Planning And Review
+
+The local planner is deterministic but request-aware:
+
+- documentation requests create a documentation task scoped to `README.md`
+- test requests create a test task scoped to `tests/`
+- refactor requests create a refactor task scoped to implementation files
+- general code requests create an implementation task scoped to `src/`, `tests/`, and selected project files
+
+When `ASSEMBLY_AGENT_PROVIDER=openai` is enabled, OpenAI currently handles implementation and review tasks. Planner tasks remain deterministic. Review runs after implementation verification, inspects the run state and artifacts, and can mark the workflow `complete`, `blocked`, or `failed`.
+
+## Approval Modes
+
+Assembly validates agent output before any edit is applied, then passes the result through an approval gate:
+
+- `auto`: apply validated edits immediately
+- `manual`: pause the run before applying edits and mark it blocked
+- `never`: dry-run mode; write artifacts but do not apply edits
+
+Local CLI defaults to `auto`. Slack and GitHub flows can use `manual` later for human approval before delivery.
 
 ## License
 

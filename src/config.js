@@ -27,6 +27,10 @@ export function getAgentProvider() {
   return process.env.ASSEMBLY_AGENT_PROVIDER || "stub";
 }
 
+export function getApprovalMode() {
+  return process.env.ASSEMBLY_APPROVAL_MODE || "auto";
+}
+
 export function getOpenAIConfig() {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -72,4 +76,3 @@ function unquote(value) {
   }
   return value;
 }
-

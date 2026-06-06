@@ -28,10 +28,13 @@ test("createRun persists request, plan, state, events, and artifacts", async () 
       "run.created",
       "run.started",
       "task.started",
+      "approval.approved",
       "task.complete",
       "task.started",
+      "approval.approved",
       "task.complete",
       "task.started",
+      "approval.approved",
       "task.complete",
       "run.complete",
     ],
@@ -122,7 +125,7 @@ test("createRun stops when an agent blocks a task", async () => {
   assert.equal(Object.values(run.state.tasks)[1].status, "pending");
   assert.deepEqual(
     run.events.map((event) => event.type),
-    ["run.created", "run.started", "task.started", "task.blocked", "run.blocked"],
+    ["run.created", "run.started", "task.started", "approval.approved", "task.blocked", "run.blocked"],
   );
 });
 
@@ -213,6 +216,100 @@ test("createRun applies valid file updates", async () => {
   assert.equal(run.state.status, "complete");
   assert.equal(await readFile(path.join(rootDir, "src/local.js"), "utf8"), "export const value = 3;\n");
   assert.ok(run.events.some((event) => event.type === "files.updated"));
+});
+
+test("createRun blocks before applying edits in manual approval mode", async () => {
+  const rootDir = await mkdtemp(path.join(tmpdir(), "assembly-manual-approval-"));
+  const previousApprovalMode = process.env.ASSEMBLY_APPROVAL_MODE;
+  await mkdir(path.join(rootDir, "src"));
+  await writeFile(path.join(rootDir, "src/local.js"), "export const value = 1;\n");
+
+  try {
+    process.env.ASSEMBLY_APPROVAL_MODE = "manual";
+    const { runId } = await createRun("Update local value manually", {
+      rootDir,
+      agentRunner: async (task) => {
+        if (task.owner === "implementation-agent") {
+          return {
+            taskId: task.id,
+            status: "complete",
+            summary: "Updated local value.",
+            changedFiles: ["src/local.js"],
+            artifacts: ["result.json", "file-updates.json"],
+            risks: [],
+            fileUpdates: [{ path: "src/local.js", content: "export const value = 9;\n" }],
+          };
+        }
+
+        return {
+          taskId: task.id,
+          status: "complete",
+          summary: "No code changes needed.",
+          changedFiles: [],
+          artifacts: ["result.json"],
+          risks: [],
+        };
+      },
+    });
+
+    const run = await readRun(runId, rootDir);
+    assert.equal(run.state.status, "blocked");
+    assert.equal(await readFile(path.join(rootDir, "src/local.js"), "utf8"), "export const value = 1;\n");
+    assert.ok(run.events.some((event) => event.type === "approval.pending"));
+  } finally {
+    if (previousApprovalMode === undefined) {
+      delete process.env.ASSEMBLY_APPROVAL_MODE;
+    } else {
+      process.env.ASSEMBLY_APPROVAL_MODE = previousApprovalMode;
+    }
+  }
+});
+
+test("createRun records dry-run before applying edits in never approval mode", async () => {
+  const rootDir = await mkdtemp(path.join(tmpdir(), "assembly-never-approval-"));
+  const previousApprovalMode = process.env.ASSEMBLY_APPROVAL_MODE;
+  await mkdir(path.join(rootDir, "src"));
+  await writeFile(path.join(rootDir, "src/local.js"), "export const value = 1;\n");
+
+  try {
+    process.env.ASSEMBLY_APPROVAL_MODE = "never";
+    const { runId } = await createRun("Update local value dry run", {
+      rootDir,
+      agentRunner: async (task) => {
+        if (task.owner === "implementation-agent") {
+          return {
+            taskId: task.id,
+            status: "complete",
+            summary: "Updated local value.",
+            changedFiles: ["src/local.js"],
+            artifacts: ["result.json", "file-updates.json"],
+            risks: [],
+            fileUpdates: [{ path: "src/local.js", content: "export const value = 9;\n" }],
+          };
+        }
+
+        return {
+          taskId: task.id,
+          status: "complete",
+          summary: "No code changes needed.",
+          changedFiles: [],
+          artifacts: ["result.json"],
+          risks: [],
+        };
+      },
+    });
+
+    const run = await readRun(runId, rootDir);
+    assert.equal(run.state.status, "blocked");
+    assert.equal(await readFile(path.join(rootDir, "src/local.js"), "utf8"), "export const value = 1;\n");
+    assert.ok(run.events.some((event) => event.type === "approval.dry_run"));
+  } finally {
+    if (previousApprovalMode === undefined) {
+      delete process.env.ASSEMBLY_APPROVAL_MODE;
+    } else {
+      process.env.ASSEMBLY_APPROVAL_MODE = previousApprovalMode;
+    }
+  }
 });
 
 test("createRun fails when verification command fails", async () => {

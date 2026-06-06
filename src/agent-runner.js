@@ -1,5 +1,6 @@
 import { getAgentProvider } from "./config.js";
 import { createOpenAIAgentRunner } from "./openai-agent-runner.js";
+import { createOpenAIReviewRunner } from "./review-agent-runner.js";
 
 export async function runStubAgent(task) {
   return {
@@ -21,11 +22,15 @@ export function createAgentRunner() {
   }
   if (provider === "openai") {
     const openAIAgentRunner = createOpenAIAgentRunner();
+    const openAIReviewRunner = createOpenAIReviewRunner();
     return async (task, context) => {
-      if (task.owner !== "implementation-agent") {
-        return runStubAgent(task);
+      if (task.owner === "implementation-agent") {
+        return openAIAgentRunner(task, context);
       }
-      return openAIAgentRunner(task, context);
+      if (task.owner === "review-agent") {
+        return openAIReviewRunner(task, context);
+      }
+      return runStubAgent(task);
     };
   }
   throw new Error(`unknown ASSEMBLY_AGENT_PROVIDER: ${provider}`);
