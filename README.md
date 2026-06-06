@@ -129,6 +129,10 @@ Assembly validates:
 - final git diff before PR creation
 - review completion before PR creation
 
+
+Assembly supports CLI, GitHub, and Slack requests, enabling flexible coordination of AI coding tasks across these platforms.
+
+
 ## GitHub
 
 Create a PR from a completed run:
