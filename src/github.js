@@ -18,7 +18,7 @@ export async function createGitHubPullRequest(runId, { rootDir = process.cwd(), 
   const title = `Assembly: ${run.request.request}`;
   const reportPath = path.join(getRunDir(runId, rootDir), "final-report.md");
   const report = await readFile(reportPath, "utf8");
-  const body = withAssemblyMetadata(report, {
+  const body = buildGitHubPullRequestBody(report, {
     runId,
     branchName,
   });
@@ -53,7 +53,7 @@ export async function createGitHubPullRequest(runId, { rootDir = process.cwd(), 
 
 export async function updateGitHubPullRequestFromRun(
   runId,
-  { rootDir = process.cwd(), branchName, commentUrl, exec = execFileAsync } = {},
+  { rootDir = process.cwd(), branchName, prNumber, commentUrl, exec = execFileAsync } = {},
 ) {
   const run = await readRun(runId, rootDir);
   const changedFiles = getRunOwnedChangedFiles(run);
@@ -64,11 +64,20 @@ export async function updateGitHubPullRequestFromRun(
   }
 
   await exec("git", ["add", "--", ...changedFiles], { cwd: rootDir });
-  await exec("git", ["commit", "-m", `Assembly follow-up: ${run.request.followUpFeedback ?? run.request.request}`], { cwd: rootDir });
+  await exec("git", ["commit", "-m", `Assembly follow-up: ${getRunTitleText(run)}`], { cwd: rootDir });
   await exec("git", ["push", "origin", branchName], { cwd: rootDir });
 
   const reportPath = path.join(getRunDir(runId, rootDir), "final-report.md");
   const report = await readFile(reportPath, "utf8");
+  const bodyPath = path.join(getRunDir(runId, rootDir), "github-pr-body.md");
+  const prBody = buildGitHubPullRequestBody(report, {
+    runId,
+    branchName,
+    parentRunId: run.request.parentRunId,
+  });
+  await writeFile(bodyPath, prBody);
+  await exec("gh", ["pr", "edit", String(prNumber ?? branchName), "--body-file", bodyPath], { cwd: rootDir });
+
   const body = [`Assembly handled this feedback with run ${runId}.`, "", report].join("\n");
 
   if (commentUrl) {
@@ -78,8 +87,17 @@ export async function updateGitHubPullRequestFromRun(
   return {
     runId,
     branchName,
+    prNumber,
     commentUrl,
   };
+}
+
+function getRunTitleText(run) {
+  const title = run.request.followUpFeedback ?? run.request.request;
+  if (typeof title === "string") {
+    return title;
+  }
+  return JSON.stringify(title);
 }
 
 export async function validateRunReadyForPullRequest(run, changedFiles, rootDir, exec) {
@@ -217,7 +235,7 @@ export function extractAssemblyMetadata(body) {
   return metadata;
 }
 
-function withAssemblyMetadata(body, metadata) {
+export function buildGitHubPullRequestBody(body, metadata) {
   const lines = Object.entries(metadata).map(([key, value]) => `<!-- assembly:${key}=${value} -->`);
   return [...lines, "", body].join("\n");
 }

@@ -383,9 +383,9 @@ Supported events:
 
 - `issues.opened` / `issues.edited` on normal issues: creates a new run and opens a new PR
 - `issue_comment.created` on normal issues: creates a new run and opens a new PR
-- `issue_comment.created` on PRs: creates a follow-up run and updates the existing PR branch
-- `pull_request_review_comment.created`: creates a follow-up run with inline file/line context
-- `pull_request_review.submitted`: creates a follow-up run from the review body
+- `issue_comment.created` on PRs: creates a follow-up run, updates the existing PR branch, refreshes the PR body with the latest run report, and posts a completion comment
+- `pull_request_review_comment.created`: creates a follow-up run with inline file/line context, updates the existing PR branch, refreshes the PR body, and posts a completion comment
+- `pull_request_review.submitted`: creates a follow-up run from the review body, updates the existing PR branch, refreshes the PR body, and posts a completion comment
 
 Webhook handling is asynchronous:
 
@@ -399,7 +399,8 @@ Webhook handling is asynchronous:
 8. create a run or follow-up run
 9. copy the run record back into `.assembly/runs/`
 10. push owned changes to a new PR branch or existing PR branch
-11. comment back on the issue or PR
+11. refresh the PR body with the latest run report for PR follow-ups
+12. comment back on the issue or PR
 
 If a GitHub job fails, Assembly comments back on the issue or PR with the failure reason.
 

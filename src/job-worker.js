@@ -105,6 +105,7 @@ async function processGitHubPrFeedbackJob(job, { rootDir, stateRootDir, exec, ag
   const delivery = await updateGitHubPullRequestFromRun(followUp.runId, {
     rootDir,
     branchName: pr.branchName,
+    prNumber: pr.number,
     commentUrl: job.payload.commentUrl,
     exec,
   });
