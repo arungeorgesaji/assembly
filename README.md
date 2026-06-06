@@ -306,6 +306,34 @@ Assembly validates agent output before any edit is applied, then passes the resu
 
 Local CLI defaults to `auto`. Slack and GitHub flows can use `manual` later for human approval before delivery.
 
+## Follow-Up And GitHub Flow
+
+Create a local follow-up run from feedback:
+
+```bash
+node src/cli.js follow-up <run-id> "Address this feedback" --pretty
+```
+
+Create a GitHub pull request from a completed run:
+
+```bash
+node src/cli.js github create-pr <run-id>
+```
+
+The GitHub PR command uses `gh` and `git`. It creates and pushes a branch named `assembly/<run-id>`, opens a PR using the run report, then switches your local checkout back to the branch you started from.
+
+Turn a GitHub issue or PR comment into a follow-up run:
+
+```bash
+node src/cli.js github comment-to-follow-up <run-id> <comment-id>
+```
+
+Authenticate GitHub CLI first:
+
+```bash
+gh auth login
+```
+
 ## License
 
 See [LICENSE](LICENSE).
