@@ -113,10 +113,10 @@ function getFailureSuggestedAction(job, error, retryable) {
     return "Open a new Assembly issue request or recreate the PR through Assembly so the PR body includes Assembly metadata.";
   }
   if (/working tree has unrelated changes/i.test(message)) {
-    return `Retry this job after the branch/worktree is clean: node src/cli.js job retry ${job.id}`;
+    return `Retry this job after the branch/worktree is clean: assembly job retry ${job.id}`;
   }
   if (retryable) {
-    return `Inspect the job, fix the underlying setup or code issue, then retry it: node src/cli.js job inspect ${job.id} --pretty && node src/cli.js job retry ${job.id}`;
+    return `Inspect the job, fix the underlying setup or code issue, then retry it: assembly job inspect ${job.id} --pretty && assembly job retry ${job.id}`;
   }
   return "Create a new request after correcting the event or repository state.";
 }

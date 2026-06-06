@@ -6,6 +6,11 @@
   "bin": {
     "assembly": "./src/cli.js"
   },
+  "files": [
+    "src/*.js",
+    ".env.example",
+    "ngrok-example.yml"
+  ],
   "scripts": {
     "test": "node --test",
     "plan": "node src/cli.js plan",

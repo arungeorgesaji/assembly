@@ -9,48 +9,62 @@ import { listJobs, readJob, resetJobForRetry } from "./job-store.js";
 import { readRun } from "./run-store.js";
 import { startWebhookServer } from "./webhook-server.js";
 import { loadEnv } from "./config.js";
+import { formatDoctorReport, runDoctor } from "./doctor.js";
+import { parseGlobalOptions, resolveRootDir } from "./root.js";
 import { validatePlan } from "./validation.js";
 
 export async function main(argv = process.argv.slice(2), io = process) {
-  await loadEnv();
-  const [command, ...args] = argv;
+  const { args: resolvedArgv, repo, errors } = parseGlobalOptions(argv);
+  if (errors.length > 0) {
+    for (const error of errors) {
+      io.stderr.write(`error: ${error}\n`);
+    }
+    io.stderr.write("usage: assembly [--repo <path>] <plan|run|follow-up|status|inspect|github|job|webhook|doctor> ...\n");
+    return 2;
+  }
+  const rootDir = await resolveRootDir({ repo });
+  await loadEnv(rootDir);
+  const [command, ...args] = resolvedArgv;
 
-  if (!["plan", "run", "follow-up", "status", "inspect", "github", "job", "webhook"].includes(command)) {
-    io.stderr.write("usage: assembly <plan|run|follow-up|status|inspect|github|job|webhook> ...\n");
+  if (!["plan", "run", "follow-up", "status", "inspect", "github", "job", "webhook", "doctor"].includes(command)) {
+    io.stderr.write("usage: assembly [--repo <path>] <plan|run|follow-up|status|inspect|github|job|webhook|doctor> ...\n");
     return 2;
   }
 
   if (command === "plan") {
-    return handlePlan(args, io);
+    return handlePlan(args, io, rootDir);
   }
   if (command === "run") {
-    return handleRun(args, io);
+    return handleRun(args, io, rootDir);
   }
   if (command === "follow-up") {
-    return handleFollowUp(args, io);
+    return handleFollowUp(args, io, rootDir);
   }
   if (command === "status") {
-    return handleStatus(args, io);
+    return handleStatus(args, io, rootDir);
   }
   if (command === "inspect") {
-    return handleInspect(args, io);
+    return handleInspect(args, io, rootDir);
   }
   if (command === "github") {
-    return handleGitHub(args, io);
+    return handleGitHub(args, io, rootDir);
   }
   if (command === "job") {
-    return handleJob(args, io);
+    return handleJob(args, io, rootDir);
   }
-  return handleWebhook(args, io);
+  if (command === "doctor") {
+    return handleDoctor(args, io, rootDir);
+  }
+  return handleWebhook(args, io, rootDir);
 }
 
-function handlePlan(args, io) {
+function handlePlan(args, io, rootDir) {
   const pretty = args.includes("--pretty");
   const request = args.filter((arg) => arg !== "--pretty").join(" ");
 
   let plan;
   try {
-    plan = createPlan(request);
+    plan = createPlan(request, { rootDir });
   } catch (error) {
     io.stderr.write(`error: ${error.message}\n`);
     return 2;
@@ -68,12 +82,12 @@ function handlePlan(args, io) {
   return 0;
 }
 
-async function handleRun(args, io) {
+async function handleRun(args, io, rootDir) {
   const pretty = args.includes("--pretty");
   const request = args.filter((arg) => arg !== "--pretty").join(" ");
 
   try {
-    const run = await createRun(request);
+    const run = await createRun(request, { rootDir });
     io.stdout.write(`${JSON.stringify(run, null, pretty ? 2 : 0)}\n`);
     return 0;
   } catch (error) {
@@ -82,7 +96,7 @@ async function handleRun(args, io) {
   }
 }
 
-async function handleFollowUp(args, io) {
+async function handleFollowUp(args, io, rootDir) {
   const pretty = args.includes("--pretty");
   const filteredArgs = args.filter((arg) => arg !== "--pretty");
   const parentRunId = filteredArgs[0];
@@ -94,7 +108,7 @@ async function handleFollowUp(args, io) {
   }
 
   try {
-    const run = await createFollowUpRun(parentRunId, feedback);
+    const run = await createFollowUpRun(parentRunId, feedback, { rootDir });
     io.stdout.write(`${JSON.stringify(run, null, pretty ? 2 : 0)}\n`);
     return 0;
   } catch (error) {
@@ -103,7 +117,7 @@ async function handleFollowUp(args, io) {
   }
 }
 
-async function handleStatus(args, io) {
+async function handleStatus(args, io, rootDir) {
   const runId = args[0];
   if (!runId) {
     io.stderr.write("usage: assembly status <run-id>\n");
@@ -111,7 +125,7 @@ async function handleStatus(args, io) {
   }
 
   try {
-    const run = await readRun(runId);
+    const run = await readRun(runId, rootDir);
     io.stdout.write(formatStatus(run));
     return 0;
   } catch (error) {
@@ -120,7 +134,7 @@ async function handleStatus(args, io) {
   }
 }
 
-async function handleInspect(args, io) {
+async function handleInspect(args, io, rootDir) {
   const pretty = args.includes("--pretty");
   const runId = args.find((arg) => arg !== "--pretty");
   if (!runId) {
@@ -129,7 +143,7 @@ async function handleInspect(args, io) {
   }
 
   try {
-    const run = await readRun(runId);
+    const run = await readRun(runId, rootDir);
     io.stdout.write(`${JSON.stringify(run, null, pretty ? 2 : 0)}\n`);
     return 0;
   } catch (error) {
@@ -138,7 +152,7 @@ async function handleInspect(args, io) {
   }
 }
 
-async function handleGitHub(args, io) {
+async function handleGitHub(args, io, rootDir) {
   const [subcommand, ...rest] = args;
   if (subcommand === "create-pr") {
     const runId = rest[0];
@@ -148,7 +162,7 @@ async function handleGitHub(args, io) {
     }
 
     try {
-      const result = await createGitHubPullRequest(runId);
+      const result = await createGitHubPullRequest(runId, { rootDir });
       io.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       return 0;
     } catch (error) {
@@ -165,8 +179,9 @@ async function handleGitHub(args, io) {
     }
 
     try {
-      const comment = await getGitHubComment(commentId);
+      const comment = await getGitHubComment(commentId, { rootDir });
       const run = await createFollowUpRun(parentRunId, comment.body, {
+        rootDir,
         source: {
           provider: "github",
           kind: "issue_comment",
@@ -186,13 +201,13 @@ async function handleGitHub(args, io) {
   return 2;
 }
 
-async function handleJob(args, io) {
+async function handleJob(args, io, rootDir) {
   const [subcommand, jobId] = args;
   const pretty = args.includes("--pretty");
   const json = args.includes("--json");
 
   if (subcommand === "list") {
-    const jobs = await listJobs();
+    const jobs = await listJobs(rootDir);
     if (json) {
       io.stdout.write(`${JSON.stringify(jobs, null, pretty ? 2 : 0)}\n`);
       return 0;
@@ -202,20 +217,20 @@ async function handleJob(args, io) {
   }
 
   if (subcommand === "inspect" && jobId) {
-    const job = await readJob(jobId);
+    const job = await readJob(jobId, rootDir);
     io.stdout.write(`${JSON.stringify(job, null, pretty ? 2 : 0)}\n`);
     return 0;
   }
 
   if (subcommand === "process" && jobId) {
-    const job = await processJob(jobId);
+    const job = await processJob(jobId, { rootDir });
     io.stdout.write(`${JSON.stringify(job, null, 2)}\n`);
     return job.status === "failed" ? 1 : 0;
   }
 
   if (subcommand === "retry" && jobId) {
-    await resetJobForRetry(jobId);
-    const job = await processJob(jobId);
+    await resetJobForRetry(jobId, rootDir);
+    const job = await processJob(jobId, { rootDir });
     io.stdout.write(`${JSON.stringify(job, null, 2)}\n`);
     return job.status === "failed" ? 1 : 0;
   }
@@ -229,7 +244,7 @@ async function handleJob(args, io) {
   return 2;
 }
 
-function handleWebhook(args, io) {
+function handleWebhook(args, io, rootDir) {
   const portIndex = args.indexOf("--port");
   const port = portIndex === -1 ? 3000 : Number(args[portIndex + 1]);
   if (!Number.isInteger(port) || port <= 0) {
@@ -237,7 +252,7 @@ function handleWebhook(args, io) {
     return 2;
   }
 
-  const server = startWebhookServer({ port });
+  const server = startWebhookServer({ port, rootDir });
   server.on("listening", () => {
     io.stdout.write([
       `Assembly webhook server listening on http://127.0.0.1:${port}`,
@@ -251,6 +266,24 @@ function handleWebhook(args, io) {
     process.exitCode = 1;
   });
   return 0;
+}
+
+async function handleDoctor(args, io, rootDir) {
+  const json = args.includes("--json");
+  const pretty = args.includes("--pretty");
+  const unknown = args.filter((arg) => !["--json", "--pretty"].includes(arg));
+  if (unknown.length > 0) {
+    io.stderr.write("usage: assembly doctor [--json] [--pretty]\n");
+    return 2;
+  }
+
+  const report = await runDoctor({ rootDir });
+  if (json) {
+    io.stdout.write(`${JSON.stringify(report, null, pretty ? 2 : 0)}\n`);
+  } else {
+    io.stdout.write(formatDoctorReport(report));
+  }
+  return report.ok ? 0 : 1;
 }
 
 function formatStatus({ request, state }) {

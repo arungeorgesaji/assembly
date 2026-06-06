@@ -542,7 +542,7 @@ test("formatGitHubJobFailureComment includes useful recovery fields", () => {
   assert.match(body, /Run: run-2/);
   assert.match(body, /Parent run: run-1/);
   assert.match(body, /Retryable: yes/);
-  assert.match(body, /node src\/cli\.js job retry job-1/);
+  assert.match(body, /assembly job retry job-1/);
 });
 
 test("formatSlackJobFailureMessage includes useful recovery fields", () => {
@@ -559,7 +559,7 @@ test("formatSlackJobFailureMessage includes useful recovery fields", () => {
   assert.match(body, /Job: job-1/);
   assert.match(body, /Run: run-1/);
   assert.match(body, /Retryable: yes/);
-  assert.match(body, /node src\/cli\.js job retry job-1/);
+  assert.match(body, /assembly job retry job-1/);
 });
 
 async function runFailingPrFeedbackJob(payload) {

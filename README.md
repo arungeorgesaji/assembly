@@ -121,16 +121,24 @@ Prerequisites:
 
 - Node.js 20 or newer
 
-Run locally without installing:
-
-```bash
-node src/cli.js plan "Add Slack workflow support" --pretty
-```
-
 Install dependencies:
 
 ```bash
 npm install
+```
+
+Link the CLI while developing locally:
+
+```bash
+npm link
+```
+
+After linking, run `assembly` from the repository you want Assembly to modify. Assembly resolves the target to the Git repository root, even when launched from a subdirectory. Use `--repo <path>` to target another checkout explicitly.
+
+Check the linked CLI:
+
+```bash
+assembly plan "Add Slack workflow support" --pretty
 ```
 
 Configure optional OpenAI execution:
@@ -150,6 +158,12 @@ OPENAI_MODEL=gpt-4.1-mini
 
 Leave `ASSEMBLY_AGENT_PROVIDER=stub` to run without an API key.
 
+Check missing local setup:
+
+```bash
+assembly doctor
+```
+
 Create a plan with npm:
 
 ```bash
@@ -165,8 +179,8 @@ npm run run -- "Add Slack workflow support" --pretty
 Check a run:
 
 ```bash
-node src/cli.js status <run-id>
-node src/cli.js inspect <run-id> --pretty
+assembly status <run-id>
+assembly inspect <run-id> --pretty
 ```
 
 Each run writes:
@@ -313,13 +327,13 @@ Local CLI defaults to `auto`. Slack and GitHub flows can use `manual` later for 
 Create a local follow-up run from feedback:
 
 ```bash
-node src/cli.js follow-up <run-id> "Address this feedback" --pretty
+assembly follow-up <run-id> "Address this feedback" --pretty
 ```
 
 Create a GitHub pull request from a completed run:
 
 ```bash
-node src/cli.js github create-pr <run-id>
+assembly github create-pr <run-id>
 ```
 
 The GitHub PR command uses `gh` and `git`. It creates and pushes a branch named `assembly/<run-id>`, opens a PR using the run report, then switches your local checkout back to the branch you started from.
@@ -337,7 +351,7 @@ Only files recorded by the completed run are staged. Assembly does not use `git 
 Turn a GitHub issue or PR comment into a follow-up run:
 
 ```bash
-node src/cli.js github comment-to-follow-up <run-id> <comment-id>
+assembly github comment-to-follow-up <run-id> <comment-id>
 ```
 
 Authenticate GitHub CLI first:
@@ -351,7 +365,7 @@ gh auth login
 Run the webhook server:
 
 ```bash
-node src/cli.js webhook --port 3000
+assembly webhook --port 3000
 ```
 
 Expose it with a tunnel such as:
@@ -392,6 +406,12 @@ ASSEMBLY_AGENT_PROVIDER=openai
 ASSEMBLY_APPROVAL_MODE=auto
 ```
 
+Before exposing the webhook, run:
+
+```bash
+assembly doctor
+```
+
 GitHub webhook events must include `@assembly` in the issue, comment, or review body. Slack requests can come from an app mention or direct message.
 
 Supported events:
@@ -424,10 +444,10 @@ Slack handling verifies Slack signatures, answers URL verification challenges, d
 For manual retry/debugging:
 
 ```bash
-node src/cli.js job list
-node src/cli.js job inspect <job-id> --pretty
-node src/cli.js job process <job-id>
-node src/cli.js job retry <job-id>
+assembly job list
+assembly job inspect <job-id> --pretty
+assembly job process <job-id>
+assembly job retry <job-id>
 ```
 
 ## License
