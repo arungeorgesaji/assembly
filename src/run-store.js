@@ -14,7 +14,7 @@ export function getRunDir(runId, rootDir = process.cwd()) {
   return path.join(rootDir, ROOT_DIR, RUNS_DIR, runId);
 }
 
-export async function initializeRun({ runId, request, plan }, rootDir = process.cwd()) {
+export async function initializeRun({ runId, request, plan, metadata = {} }, rootDir = process.cwd()) {
   const runDir = getRunDir(runId, rootDir);
   await mkdir(path.join(runDir, "artifacts"), { recursive: true });
 
@@ -38,10 +38,11 @@ export async function initializeRun({ runId, request, plan }, rootDir = process.
     id: runId,
     request,
     createdAt: new Date().toISOString(),
+    ...metadata,
   });
   await writeJson(path.join(runDir, "plan.json"), plan);
   await writeJson(path.join(runDir, "state.json"), state);
-  await appendEvent(runId, { type: "run.created", data: { request } }, rootDir);
+  await appendEvent(runId, { type: "run.created", data: { request, metadata } }, rootDir);
 
   return state;
 }

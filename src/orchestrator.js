@@ -17,7 +17,7 @@ import {
   writeState,
 } from "./run-store.js";
 
-export async function createRun(request, { rootDir = process.cwd(), agentRunner } = {}) {
+export async function createRun(request, { rootDir = process.cwd(), agentRunner, metadata = {} } = {}) {
   const resolvedAgentRunner = agentRunner ?? createAgentRunner();
   const plan = createPlan(request, { rootDir });
   const errors = validatePlan(plan);
@@ -26,7 +26,7 @@ export async function createRun(request, { rootDir = process.cwd(), agentRunner 
   }
 
   const runId = createRunId();
-  const state = await initializeRun({ runId, request: plan.request, plan }, rootDir);
+  const state = await initializeRun({ runId, request: plan.request, plan, metadata }, rootDir);
 
   await executeReadyTasks({ runId, plan, state, rootDir, agentRunner: resolvedAgentRunner });
 
