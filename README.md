@@ -174,6 +174,16 @@ Slack app:
 
 Mention `@assembly` in GitHub issues, PR comments, review comments, or Slack messages to queue work.
 
+**Troubleshooting:**
+
+Before starting webhooks, run:
+
+```bash
+assembly doctor
+```
+
+This command checks your environment setup including `GITHUB_WEBHOOK_SECRET`, `SLACK_SIGNING_SECRET`, and `SLACK_BOT_TOKEN`. Running the doctor helps identify any missing configuration or authentication issues early, ensuring your webhook server can start and operate correctly.
+
 ## Development
 
 ```bash
