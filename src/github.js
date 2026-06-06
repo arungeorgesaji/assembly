@@ -127,6 +127,12 @@ export async function validateRunReadyForPullRequest(run, changedFiles, rootDir,
   if (unrelatedDirtyFiles.length > 0) {
     throw new Error(`working tree has unrelated changes: ${unrelatedDirtyFiles.join(", ")}`);
   }
+
+  const finalDiffFiles = await getFinalDiffFiles(rootDir, exec);
+  const unownedDiffFiles = finalDiffFiles.filter((file) => !changedFiles.includes(file));
+  if (unownedDiffFiles.length > 0) {
+    throw new Error(`final diff includes files not owned by run ${run.state.runId}: ${unownedDiffFiles.join(", ")}`);
+  }
 }
 
 export function getRunOwnedChangedFiles(run) {
@@ -186,6 +192,15 @@ async function getDirtyFiles(rootDir, exec) {
     .map((line) => line.trimEnd())
     .filter(Boolean)
     .flatMap((line) => parsePorcelainChangedFiles(line))
+    .sort();
+}
+
+async function getFinalDiffFiles(rootDir, exec) {
+  const { stdout } = await exec("git", ["diff", "--name-only", "HEAD"], { cwd: rootDir });
+  return stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
     .sort();
 }
 

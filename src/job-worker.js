@@ -20,7 +20,8 @@ export async function processJob(jobId, { rootDir = process.cwd(), exec = execFi
       result,
     }, rootDir);
   } catch (error) {
-    await notifyGitHubJobFailure(job, error, { rootDir, exec });
+    const latestJob = await readJob(jobId, rootDir).catch(() => job);
+    await notifyGitHubJobFailure(latestJob, error, { rootDir, exec });
     return updateJob(jobId, {
       status: "failed",
       failedAt: new Date().toISOString(),
@@ -34,11 +35,7 @@ async function notifyGitHubJobFailure(job, error, { rootDir, exec }) {
     return;
   }
 
-  const body = [
-    `Assembly could not complete job ${job.id}.`,
-    "",
-    `Error: ${error.message}`,
-  ].join("\n");
+  const body = formatGitHubJobFailureComment(job, error);
 
   try {
     if (job.payload?.issueNumber) {
@@ -52,6 +49,44 @@ async function notifyGitHubJobFailure(job, error, { rootDir, exec }) {
   } catch {
     // Keep the original job failure as the source of truth.
   }
+}
+
+export function formatGitHubJobFailureComment(job, error) {
+  const retryable = isRetryableJobFailure(error);
+  return [
+    "Assembly could not complete this request.",
+    "",
+    `Job: ${job.id}`,
+    job.runId ? `Run: ${job.runId}` : null,
+    job.parentRunId ? `Parent run: ${job.parentRunId}` : null,
+    `Retryable: ${retryable ? "yes" : "no"}`,
+    "",
+    `Error: ${error.message}`,
+    "",
+    `Suggested next action: ${getFailureSuggestedAction(job, error, retryable)}`,
+  ].filter(Boolean).join("\n");
+}
+
+function isRetryableJobFailure(error) {
+  const message = String(error.message ?? "");
+  if (/does not include Assembly run metadata|unsupported job type|invalid signature|invalid JSON/i.test(message)) {
+    return false;
+  }
+  return true;
+}
+
+function getFailureSuggestedAction(job, error, retryable) {
+  const message = String(error.message ?? "");
+  if (/does not include Assembly run metadata/i.test(message)) {
+    return "Open a new Assembly issue request or recreate the PR through Assembly so the PR body includes Assembly metadata.";
+  }
+  if (/working tree has unrelated changes/i.test(message)) {
+    return `Retry this job after the branch/worktree is clean: node src/cli.js job retry ${job.id}`;
+  }
+  if (retryable) {
+    return `Inspect the job, fix the underlying setup or code issue, then retry it: node src/cli.js job inspect ${job.id} --pretty && node src/cli.js job retry ${job.id}`;
+  }
+  return "Create a new request after correcting the event or repository state.";
 }
 
 export async function getJob(jobId, rootDir = process.cwd()) {
@@ -85,6 +120,7 @@ async function processGitHubPrFeedbackJob(job, { rootDir, stateRootDir, exec, ag
   if (!pr.runId) {
     throw new Error(`pull request ${job.payload.prNumber} does not include Assembly run metadata`);
   }
+  await updateJob(job.id, { parentRunId: pr.runId }, stateRootDir);
 
   await exec("git", ["fetch", "origin", pr.branchName], { cwd: rootDir });
   await exec("git", ["checkout", pr.branchName], { cwd: rootDir });
@@ -101,6 +137,7 @@ async function processGitHubPrFeedbackJob(job, { rootDir, stateRootDir, exec, ag
       url: job.payload.commentUrl,
     },
   });
+  await updateJob(job.id, { runId: followUp.runId }, stateRootDir);
 
   const delivery = await updateGitHubPullRequestFromRun(followUp.runId, {
     rootDir,
@@ -138,6 +175,7 @@ async function processGitHubIssueRequestJob(job, { rootDir, stateRootDir, exec, 
     },
   });
 
+  await updateJob(job.id, { runId: run.runId }, stateRootDir);
   await copyRunRecord(run.runId, rootDir, stateRootDir);
   const pr = await createGitHubPullRequest(run.runId, { rootDir, exec });
   await copyRunRecord(run.runId, rootDir, stateRootDir);

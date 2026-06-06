@@ -202,6 +202,7 @@ The first working slice includes:
 - Task folder/file scopes with allowlists and denylists
 - A deterministic request-aware planner for turning a change request into a task graph
 - Request-specific task shapes for documentation, tests, refactors, and general code changes
+- Repository-aware planning that inspects source, test, documentation, config files, package scripts, and narrows task scopes when request terms identify likely targets
 - Lightweight repository inspection for package type and verification commands
 - Plan validation for missing owners, missing acceptance criteria, and invalid dependencies
 - A CLI that emits plan JSON
@@ -213,6 +214,7 @@ The first working slice includes:
 - Approval gate before applying edits, defaulting to `ASSEMBLY_APPROVAL_MODE=auto`
 - Agent result validation for task id, terminal status, summary, changed files, artifacts, and risks
 - Changed-file validation against each task's assigned scope
+- Final git diff validation before PR creation or update to reject files that were not owned by the completed run
 - Unified diff patch validation and local application through `git apply`
 - Structured full-file updates for reliable local edits when patch generation is too brittle
 - Additive change policy for `Add ...` requests to prevent accidental line removals
@@ -402,7 +404,7 @@ Webhook handling is asynchronous:
 11. refresh the PR body with the latest run report for PR follow-ups
 12. comment back on the issue or PR
 
-If a GitHub job fails, Assembly comments back on the issue or PR with the failure reason.
+If a GitHub job fails, Assembly comments back on the issue or PR with the job id, run id when one was created, retryability, the failure reason, and a suggested next action.
 
 For manual retry/debugging:
 

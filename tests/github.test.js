@@ -26,6 +26,9 @@ test("createGitHubPullRequest restores the starting branch after creating a PR",
     if (command === "git" && args.join(" ") === "status --porcelain") {
       return { stdout: " M README.md\n" };
     }
+    if (command === "git" && args.join(" ") === "diff --name-only HEAD") {
+      return { stdout: "README.md\n" };
+    }
     if (command === "gh") {
       return { stdout: "https://github.com/example/repo/pull/1\n" };
     }
@@ -42,6 +45,7 @@ test("createGitHubPullRequest restores the starting branch after creating a PR",
     calls.map((call) => [call.command, ...call.args.slice(0, 2)]),
     [
       ["git", "status", "--porcelain"],
+      ["git", "diff", "--name-only"],
       ["git", "branch", "--show-current"],
       ["git", "checkout", "-B"],
       ["git", "add", "--"],
@@ -63,6 +67,9 @@ test("createGitHubPullRequest rejects unrelated dirty files", async () => {
     if (command === "git" && args.join(" ") === "status --porcelain") {
       return { stdout: " M README.md\n M src/unrelated.js\n" };
     }
+    if (command === "git" && args.join(" ") === "diff --name-only HEAD") {
+      return { stdout: "README.md\nsrc/unrelated.js\n" };
+    }
     if (command === "git" && args.join(" ") === "branch --show-current") {
       return { stdout: "main\n" };
     }
@@ -75,11 +82,32 @@ test("createGitHubPullRequest rejects unrelated dirty files", async () => {
   );
 });
 
+test("createGitHubPullRequest rejects final diff files not owned by the run", async () => {
+  const { rootDir } = await createCompletedRunFixture();
+  const exec = async (command, args) => {
+    if (command === "git" && args.join(" ") === "status --porcelain") {
+      return { stdout: " M README.md\n" };
+    }
+    if (command === "git" && args.join(" ") === "diff --name-only HEAD") {
+      return { stdout: "README.md\nsrc/hidden.js\n" };
+    }
+    return { stdout: "" };
+  };
+
+  await assert.rejects(
+    () => createGitHubPullRequest("run-1", { rootDir, exec }),
+    /final diff includes files not owned by run run-1: src\/hidden.js/,
+  );
+});
+
 test("createGitHubPullRequest rejects runs without completed review", async () => {
   const { rootDir } = await createCompletedRunFixture({ includeReview: false });
   const exec = async (command, args) => {
     if (command === "git" && args.join(" ") === "status --porcelain") {
       return { stdout: " M README.md\n" };
+    }
+    if (command === "git" && args.join(" ") === "diff --name-only HEAD") {
+      return { stdout: "README.md\n" };
     }
     if (command === "git" && args.join(" ") === "branch --show-current") {
       return { stdout: "main\n" };
@@ -98,6 +126,9 @@ test("createGitHubPullRequest rejects failed verification", async () => {
   const exec = async (command, args) => {
     if (command === "git" && args.join(" ") === "status --porcelain") {
       return { stdout: " M README.md\n" };
+    }
+    if (command === "git" && args.join(" ") === "diff --name-only HEAD") {
+      return { stdout: "README.md\n" };
     }
     if (command === "git" && args.join(" ") === "branch --show-current") {
       return { stdout: "main\n" };
@@ -128,6 +159,9 @@ test("updateGitHubPullRequestFromRun refreshes the existing PR body with the lat
     if (command === "git" && args.join(" ") === "status --porcelain") {
       return { stdout: " M README.md\n" };
     }
+    if (command === "git" && args.join(" ") === "diff --name-only HEAD") {
+      return { stdout: "README.md\n" };
+    }
     return { stdout: "" };
   };
 
@@ -145,6 +179,7 @@ test("updateGitHubPullRequestFromRun refreshes the existing PR body with the lat
     calls.map((call) => [call.command, ...call.args.slice(0, 3)]),
     [
       ["git", "status", "--porcelain"],
+      ["git", "diff", "--name-only", "HEAD"],
       ["git", "add", "--", "README.md"],
       ["git", "commit", "-m", "Assembly follow-up: @assembly tighten docs"],
       ["git", "push", "origin", "assembly/run-1"],

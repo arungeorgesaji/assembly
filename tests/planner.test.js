@@ -32,7 +32,41 @@ test("createPlan uses a tests-specific implementation task", () => {
 
   assert.equal(plan.tasks[1].id, "add-tests-for-planner-tests");
   assert.equal(plan.tasks[1].title, "Update tests");
-  assert.deepEqual(plan.tasks[1].scope.paths, ["tests/"]);
+  assert.deepEqual(plan.tasks[1].scope.paths, []);
+  assert.deepEqual(plan.tasks[1].scope.allowlist, ["tests/planner.test.js"]);
+  assert.deepEqual(validatePlan(plan), []);
+});
+
+test("createPlan narrows code scopes from repository file matches", () => {
+  const plan = createPlan("Improve github webhook duplicate handling", {
+    repoContext: {
+      language: "javascript",
+      verificationCommands: ["npm test"],
+      sourceFiles: ["src/github-webhooks.js", "src/planner.js"],
+      testFiles: ["tests/github-webhooks.test.js", "tests/planner.test.js"],
+      documentationFiles: ["README.md"],
+      configFiles: ["package.json"],
+      suggestedScopes: {
+        implementation: {
+          paths: ["src/", "tests/"],
+          allowlist: ["package.json", "README.md"],
+          denylist: [".env", ".git/"],
+        },
+        review: {
+          paths: ["tests/", ".assembly/"],
+          allowlist: ["README.md"],
+          denylist: [".env", ".git/"],
+        },
+      },
+    },
+  });
+
+  assert.equal(plan.tasks[1].id, "improve-github-webhook-duplicate-implement");
+  assert.deepEqual(plan.tasks[1].scope.allowlist, ["src/github-webhooks.js"]);
+  assert.equal(plan.tasks[2].id, "improve-github-webhook-duplicate-tests");
+  assert.deepEqual(plan.tasks[2].scope.allowlist, ["tests/github-webhooks.test.js"]);
+  assert.deepEqual(plan.tasks[3].dependencies, ["improve-github-webhook-duplicate-implement", "improve-github-webhook-duplicate-tests"]);
+  assert.match(plan.risks[0], /src\/github-webhooks\.js/);
   assert.deepEqual(validatePlan(plan), []);
 });
 

@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { enqueueJob } from "../src/job-store.js";
-import { processJob } from "../src/job-worker.js";
+import { formatGitHubJobFailureComment, processJob } from "../src/job-worker.js";
 
 test("processJob creates a run and PR for GitHub issue requests", async () => {
   const rootDir = await mkdtemp(path.join(tmpdir(), "assembly-issue-job-"));
@@ -122,7 +122,13 @@ test("processJob comments on GitHub issue when issue request fails", async () =>
   } });
 
   assert.equal(processed.status, "failed");
-  assert.ok(calls.some((call) => call.command === "gh" && call.args[0] === "issue" && call.args[1] === "comment"));
+  const commentCall = calls.find((call) => call.command === "gh" && call.args[0] === "issue" && call.args[1] === "comment");
+  assert.ok(commentCall);
+  const body = commentCall.args.at(-1);
+  assert.match(body, /Job: /);
+  assert.match(body, /Run: /);
+  assert.match(body, /Retryable: yes/);
+  assert.match(body, /Suggested next action: /);
 });
 
 test("processJob comments on PR conversation comment failures", async () => {
@@ -135,7 +141,7 @@ test("processJob comments on PR conversation comment failures", async () => {
   });
 
   assert.equal(result.processed.status, "failed");
-  assert.ok(result.calls.some((call) => call.command === "gh" && call.args[0] === "pr" && call.args[1] === "comment"));
+  assertFailureComment(result.calls, { retryable: false });
 });
 
 test("processJob comments on inline PR review comment failures", async () => {
@@ -151,7 +157,7 @@ test("processJob comments on inline PR review comment failures", async () => {
   });
 
   assert.equal(result.processed.status, "failed");
-  assert.ok(result.calls.some((call) => call.command === "gh" && call.args[0] === "pr" && call.args[1] === "comment"));
+  assertFailureComment(result.calls, { retryable: false });
 });
 
 test("processJob comments on PR review submission failures", async () => {
@@ -165,7 +171,26 @@ test("processJob comments on PR review submission failures", async () => {
   });
 
   assert.equal(result.processed.status, "failed");
-  assert.ok(result.calls.some((call) => call.command === "gh" && call.args[0] === "pr" && call.args[1] === "comment"));
+  assertFailureComment(result.calls, { retryable: false });
+});
+
+test("formatGitHubJobFailureComment includes useful recovery fields", () => {
+  const body = formatGitHubJobFailureComment(
+    {
+      id: "job-1",
+      runId: "run-2",
+      parentRunId: "run-1",
+      type: "github.pr_feedback",
+    },
+    new Error("gh failed"),
+  );
+
+  assert.match(body, /Assembly could not complete this request/);
+  assert.match(body, /Job: job-1/);
+  assert.match(body, /Run: run-2/);
+  assert.match(body, /Parent run: run-1/);
+  assert.match(body, /Retryable: yes/);
+  assert.match(body, /node src\/cli\.js job retry job-1/);
 });
 
 async function runFailingPrFeedbackJob(payload) {
@@ -191,4 +216,13 @@ async function runFailingPrFeedbackJob(payload) {
 
   const processed = await processJob(job.id, { rootDir, exec });
   return { processed, calls };
+}
+
+function assertFailureComment(calls, { retryable }) {
+  const commentCall = calls.find((call) => call.command === "gh" && call.args[0] === "pr" && call.args[1] === "comment");
+  assert.ok(commentCall);
+  const body = commentCall.args.at(-1);
+  assert.match(body, /Job: /);
+  assert.match(body, new RegExp(`Retryable: ${retryable ? "yes" : "no"}`));
+  assert.match(body, /Suggested next action: /);
 }
