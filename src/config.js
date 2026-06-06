@@ -31,6 +31,10 @@ export function getApprovalMode() {
   return process.env.ASSEMBLY_APPROVAL_MODE || "auto";
 }
 
+export function getGitHubWebhookSecret() {
+  return process.env.GITHUB_WEBHOOK_SECRET || "";
+}
+
 export function getOpenAIConfig() {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {

@@ -1,0 +1,9 @@
+version: "3"
+agent:
+    authtoken: AUTHTOKEN 
+
+tunnels:
+  assembly:
+    proto: http
+    addr: 3000
+    domain: URL 

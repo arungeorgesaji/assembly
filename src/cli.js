@@ -4,7 +4,9 @@ import { createPlan } from "./planner.js";
 import { createRun } from "./orchestrator.js";
 import { createFollowUpRun } from "./follow-up.js";
 import { createGitHubPullRequest, getGitHubComment } from "./github.js";
+import { processJob } from "./job-worker.js";
 import { readRun } from "./run-store.js";
+import { startWebhookServer } from "./webhook-server.js";
 import { loadEnv } from "./config.js";
 import { validatePlan } from "./validation.js";
 
@@ -12,8 +14,8 @@ export async function main(argv = process.argv.slice(2), io = process) {
   await loadEnv();
   const [command, ...args] = argv;
 
-  if (!["plan", "run", "follow-up", "status", "inspect", "github"].includes(command)) {
-    io.stderr.write("usage: assembly <plan|run|follow-up|status|inspect|github> ...\n");
+  if (!["plan", "run", "follow-up", "status", "inspect", "github", "job", "webhook"].includes(command)) {
+    io.stderr.write("usage: assembly <plan|run|follow-up|status|inspect|github|job|webhook> ...\n");
     return 2;
   }
 
@@ -32,7 +34,13 @@ export async function main(argv = process.argv.slice(2), io = process) {
   if (command === "inspect") {
     return handleInspect(args, io);
   }
-  return handleGitHub(args, io);
+  if (command === "github") {
+    return handleGitHub(args, io);
+  }
+  if (command === "job") {
+    return handleJob(args, io);
+  }
+  return handleWebhook(args, io);
 }
 
 function handlePlan(args, io) {
@@ -175,6 +183,37 @@ async function handleGitHub(args, io) {
 
   io.stderr.write("usage: assembly github <create-pr|comment-to-follow-up> ...\n");
   return 2;
+}
+
+async function handleJob(args, io) {
+  const [subcommand, jobId] = args;
+  if (subcommand !== "process" || !jobId) {
+    io.stderr.write("usage: assembly job process <job-id>\n");
+    return 2;
+  }
+
+  const job = await processJob(jobId);
+  io.stdout.write(`${JSON.stringify(job, null, 2)}\n`);
+  return job.status === "failed" ? 1 : 0;
+}
+
+function handleWebhook(args, io) {
+  const portIndex = args.indexOf("--port");
+  const port = portIndex === -1 ? 3000 : Number(args[portIndex + 1]);
+  if (!Number.isInteger(port) || port <= 0) {
+    io.stderr.write("usage: assembly webhook [--port <port>]\n");
+    return 2;
+  }
+
+  const server = startWebhookServer({ port });
+  server.on("listening", () => {
+    io.stdout.write(`Assembly webhook server listening on http://127.0.0.1:${port}/github/webhook\n`);
+  });
+  server.on("error", (error) => {
+    io.stderr.write(`error: unable to start webhook server: ${error.message}\n`);
+    process.exitCode = 1;
+  });
+  return 0;
 }
 
 function formatStatus({ request, state }) {

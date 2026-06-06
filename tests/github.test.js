@@ -1,30 +1,24 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { createGitHubPullRequest, getGitHubComment } from "../src/github.js";
-import { initializeRun, writeRunFile, writeState } from "../src/run-store.js";
+import { createGitHubPullRequest, extractAssemblyMetadata, getGitHubComment, getGitHubPullRequest } from "../src/github.js";
+import { getRunDir } from "../src/run-store.js";
+import { appendEvent, initializeRun, writeRunFile, writeState } from "../src/run-store.js";
 
 test("createGitHubPullRequest restores the starting branch after creating a PR", async () => {
-  const rootDir = await mkdtemp(path.join(tmpdir(), "assembly-github-"));
-  await mkdir(path.join(rootDir, ".assembly", "runs", "run-1"), { recursive: true });
-  const plan = {
-    request: "Add docs",
-    tasks: [],
-    verification: [],
-  };
-  const state = await initializeRun({ runId: "run-1", request: "Add docs", plan }, rootDir);
-  state.status = "complete";
-  await writeState("run-1", state, rootDir);
-  await writeRunFile("run-1", "final-report.md", "# Report\n", rootDir);
+  const { rootDir } = await createCompletedRunFixture();
 
   const calls = [];
   const exec = async (command, args, options) => {
     calls.push({ command, args, cwd: options.cwd });
     if (command === "git" && args.join(" ") === "branch --show-current") {
       return { stdout: "main\n" };
+    }
+    if (command === "git" && args.join(" ") === "status --porcelain") {
+      return { stdout: " M README.md\n" };
     }
     if (command === "gh") {
       return { stdout: "https://github.com/example/repo/pull/1\n" };
@@ -33,6 +27,7 @@ test("createGitHubPullRequest restores the starting branch after creating a PR",
   };
 
   const result = await createGitHubPullRequest("run-1", { rootDir, exec });
+  const prBody = await readFile(path.join(getRunDir("run-1", rootDir), "github-pr-body.md"), "utf8");
 
   assert.equal(result.branchName, "assembly/run-1");
   assert.equal(result.restoredBranch, "main");
@@ -40,14 +35,73 @@ test("createGitHubPullRequest restores the starting branch after creating a PR",
   assert.deepEqual(
     calls.map((call) => [call.command, ...call.args.slice(0, 2)]),
     [
+      ["git", "status", "--porcelain"],
       ["git", "branch", "--show-current"],
       ["git", "checkout", "-B"],
-      ["git", "add", "."],
+      ["git", "add", "--"],
       ["git", "commit", "-m"],
       ["git", "push", "-u"],
       ["gh", "pr", "create"],
       ["git", "checkout", "main"],
     ],
+  );
+  const addCall = calls.find((call) => call.command === "git" && call.args[0] === "add");
+  assert.deepEqual(addCall.args, ["add", "--", "README.md"]);
+  assert.match(prBody, /<!-- assembly:runId=run-1 -->/);
+  assert.match(prBody, /<!-- assembly:branchName=assembly\/run-1 -->/);
+});
+
+test("createGitHubPullRequest rejects unrelated dirty files", async () => {
+  const { rootDir } = await createCompletedRunFixture();
+  const exec = async (command, args, options) => {
+    if (command === "git" && args.join(" ") === "status --porcelain") {
+      return { stdout: " M README.md\n M src/unrelated.js\n" };
+    }
+    if (command === "git" && args.join(" ") === "branch --show-current") {
+      return { stdout: "main\n" };
+    }
+    return { stdout: "", stderr: "", options };
+  };
+
+  await assert.rejects(
+    () => createGitHubPullRequest("run-1", { rootDir, exec }),
+    /working tree has unrelated changes: src\/unrelated.js/,
+  );
+});
+
+test("createGitHubPullRequest rejects runs without completed review", async () => {
+  const { rootDir } = await createCompletedRunFixture({ includeReview: false });
+  const exec = async (command, args) => {
+    if (command === "git" && args.join(" ") === "status --porcelain") {
+      return { stdout: " M README.md\n" };
+    }
+    if (command === "git" && args.join(" ") === "branch --show-current") {
+      return { stdout: "main\n" };
+    }
+    return { stdout: "" };
+  };
+
+  await assert.rejects(
+    () => createGitHubPullRequest("run-1", { rootDir, exec }),
+    /does not have a completed review/,
+  );
+});
+
+test("createGitHubPullRequest rejects failed verification", async () => {
+  const { rootDir } = await createCompletedRunFixture({ verificationExitCode: 1 });
+  const exec = async (command, args) => {
+    if (command === "git" && args.join(" ") === "status --porcelain") {
+      return { stdout: " M README.md\n" };
+    }
+    if (command === "git" && args.join(" ") === "branch --show-current") {
+      return { stdout: "main\n" };
+    }
+    return { stdout: "" };
+  };
+
+  await assert.rejects(
+    () => createGitHubPullRequest("run-1", { rootDir, exec }),
+    /has failed verification/,
   );
 });
 
@@ -71,3 +125,91 @@ test("getGitHubComment reads comment body through gh api", async () => {
   });
 });
 
+test("getGitHubPullRequest extracts Assembly metadata", async () => {
+  const exec = async (command, args) => {
+    assert.equal(command, "gh");
+    assert.deepEqual(args, ["pr", "view", "7", "--json", "body,headRefName"]);
+    return {
+      stdout: JSON.stringify({
+        body: "<!-- assembly:runId=run-1 -->\n<!-- assembly:branchName=assembly/run-1 -->\n# Body",
+        headRefName: "assembly/run-1",
+      }),
+    };
+  };
+
+  assert.deepEqual(await getGitHubPullRequest(7, { exec }), {
+    number: 7,
+    body: "<!-- assembly:runId=run-1 -->\n<!-- assembly:branchName=assembly/run-1 -->\n# Body",
+    branchName: "assembly/run-1",
+    runId: "run-1",
+  });
+});
+
+test("extractAssemblyMetadata parses metadata comments", () => {
+  assert.deepEqual(
+    extractAssemblyMetadata("<!-- assembly:runId=abc -->\n<!-- assembly:branchName=assembly/abc -->"),
+    {
+      runId: "abc",
+      branchName: "assembly/abc",
+    },
+  );
+});
+
+async function createCompletedRunFixture({ includeReview = true, verificationExitCode = 0 } = {}) {
+  const rootDir = await mkdtemp(path.join(tmpdir(), "assembly-github-"));
+  await mkdir(path.join(rootDir, ".assembly", "runs", "run-1"), { recursive: true });
+  const plan = {
+    request: "Add docs",
+    tasks: [
+      {
+        id: "add-docs-docs",
+        owner: "implementation-agent",
+        scope: {
+          paths: [],
+          allowlist: ["README.md"],
+          denylist: [".env", ".git/", ".assembly/"],
+        },
+      },
+      {
+        id: "add-docs-review",
+        owner: "review-agent",
+        scope: {
+          paths: ["tests/"],
+          allowlist: ["README.md"],
+          denylist: [".env", ".git/"],
+        },
+      },
+    ],
+    verification: ["npm test"],
+  };
+  const state = await initializeRun({ runId: "run-1", request: "Add docs", plan }, rootDir);
+  state.status = "complete";
+  state.tasks = {
+    "add-docs-docs": { status: "complete", owner: "implementation-agent", title: "Update docs" },
+    "add-docs-review": { status: includeReview ? "complete" : "pending", owner: "review-agent", title: "Review" },
+  };
+  await writeState("run-1", state, rootDir);
+  await appendEvent("run-1", {
+    type: "files.updated",
+    taskId: "add-docs-docs",
+    data: { changedFiles: ["README.md"] },
+  }, rootDir);
+  await appendEvent("run-1", {
+    type: "task.complete",
+    taskId: "add-docs-docs",
+    data: { status: "complete", changedFiles: ["README.md"] },
+  }, rootDir);
+  await appendEvent("run-1", {
+    type: "verification.completed",
+    data: { results: [{ command: "npm test", exitCode: verificationExitCode }] },
+  }, rootDir);
+  if (includeReview) {
+    await appendEvent("run-1", {
+      type: "task.complete",
+      taskId: "add-docs-review",
+      data: { status: "complete", changedFiles: ["README.md"] },
+    }, rootDir);
+  }
+  await writeRunFile("run-1", "final-report.md", "# Report\n", rootDir);
+  return { rootDir };
+}
