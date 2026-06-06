@@ -113,6 +113,136 @@ Assembly is under active development.
 
 The goal is not to replace engineers. The goal is to make AI-assisted development more structured, accountable, reviewable, and safe for real software teams.
 
+## Getting Started
+
+Assembly currently ships as a local Node.js CLI. It does not require API keys yet.
+
+Prerequisites:
+
+- Node.js 20 or newer
+
+Run locally without installing:
+
+```bash
+node src/cli.js plan "Add Slack workflow support" --pretty
+```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Configure optional OpenAI execution:
+
+```bash
+cp .env.example .env
+```
+
+Then set:
+
+```text
+ASSEMBLY_AGENT_PROVIDER=openai
+OPENAI_API_KEY=your_api_key
+OPENAI_MODEL=gpt-4.1-mini
+```
+
+Leave `ASSEMBLY_AGENT_PROVIDER=stub` to run without an API key.
+
+Create a plan with npm:
+
+```bash
+npm run plan -- "Add Slack workflow support" --pretty
+```
+
+Create a persisted local run:
+
+```bash
+npm run run -- "Add Slack workflow support" --pretty
+```
+
+Check a run:
+
+```bash
+node src/cli.js status <run-id>
+node src/cli.js inspect <run-id> --pretty
+```
+
+Each run writes:
+
+```text
+.assembly/runs/<run-id>/
+  request.json
+  plan.json
+  state.json
+  events.jsonl
+  final-report.md
+  artifacts/
+    <task-id>/
+      result.json
+```
+
+Run tests:
+
+```bash
+npm test
+```
+
+## Current Implementation
+
+The first working slice includes:
+
+- A structured execution plan model
+- Task ownership, dependencies, acceptance criteria, risks, and verification steps
+- Task folder/file scopes with allowlists and denylists
+- A deterministic planner for turning a change request into a task graph
+- Plan validation for missing owners, missing acceptance criteria, and invalid dependencies
+- A CLI that emits plan JSON
+- A local run store under `.assembly/runs/<run-id>/`
+- A stub agent runner that produces per-task artifacts
+- Optional OpenAI agent runner selected with `ASSEMBLY_AGENT_PROVIDER=openai`
+- Local `.env` loading for `OPENAI_API_KEY` and `OPENAI_MODEL`
+- Agent result validation for task id, terminal status, summary, changed files, artifacts, and risks
+- Changed-file validation against each task's assigned scope
+- Blocked and failed run handling
+- Final report generation for every run
+- Status and inspect commands for persisted runs
+
+Repository patch execution, Slack integration, pull request automation, and stronger provider-backed coding behavior are planned next layers.
+
+## Agent Result Contract
+
+Agents must return structured results:
+
+```json
+{
+  "taskId": "task-id",
+  "status": "complete",
+  "summary": "What happened.",
+  "changedFiles": [],
+  "artifacts": ["result.json"],
+  "risks": []
+}
+```
+
+Valid statuses are `complete`, `blocked`, and `failed`. A completed task must include at least one artifact. If the result does not match the dispatched task or fails validation, Assembly marks the task and run as failed.
+
+## Task Scope Contract
+
+Each task includes a scope:
+
+```json
+{
+  "scope": {
+    "paths": ["src/", "tests/"],
+    "allowlist": ["package.json"],
+    "denylist": [".env", ".git/", ".assembly/"]
+  }
+}
+```
+
+Every reported changed file must be a safe relative path inside `paths` or explicitly listed in `allowlist`. Denylisted paths always fail validation. Absolute paths and `../` traversal are rejected.
+
 ## License
 
 See [LICENSE](LICENSE).
