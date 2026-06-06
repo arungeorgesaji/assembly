@@ -309,6 +309,180 @@ test("processJob updates the same PR for later Slack requests in the same thread
   }
 });
 
+test("processJob reports Slack run failure before attempting to create a PR", async () => {
+  const rootDir = await mkdtemp(path.join(tmpdir(), "assembly-slack-run-fail-"));
+  await mkdir(path.join(rootDir, "src"));
+  await mkdir(path.join(rootDir, "tests"));
+  await writeFile(path.join(rootDir, "README.md"), "# Demo\n");
+  await writeFile(path.join(rootDir, "package.json"), JSON.stringify({ scripts: { test: "node --test" } }));
+
+  const job = await enqueueJob({
+    type: "slack.request",
+    payload: {
+      kind: "app_mention",
+      eventId: "Ev1",
+      channel: "C1",
+      user: "U1",
+      teamId: "T1",
+      text: "Improve the system",
+      threadTs: "123.456",
+    },
+  }, rootDir);
+
+  const previousToken = process.env.SLACK_BOT_TOKEN;
+  const previousFetch = globalThis.fetch;
+  const slackPosts = [];
+  const calls = [];
+  try {
+    process.env.SLACK_BOT_TOKEN = "xoxb-test";
+    globalThis.fetch = async (url, options) => {
+      slackPosts.push({ url, options, body: JSON.parse(options.body) });
+      return { json: async () => ({ ok: true, ts: "124.000" }) };
+    };
+    const exec = async (command, args, options) => {
+      calls.push({ command, args, cwd: options.cwd });
+      return { stdout: "" };
+    };
+
+    const processed = await processJob(job.id, { rootDir, exec, agentRunner: async (task) => {
+      if (task.owner === "implementation-agent") {
+        return {
+          taskId: task.id,
+          status: "failed",
+          summary: "Could not produce a valid patch.",
+          changedFiles: [],
+          artifacts: ["result.json"],
+          risks: ["No valid patches in input"],
+        };
+      }
+
+      return {
+        taskId: task.id,
+        status: "complete",
+        summary: "Completed.",
+        changedFiles: [],
+        artifacts: ["result.json"],
+        risks: [],
+      };
+    } });
+
+    assert.equal(processed.status, "failed");
+    assert.equal(calls.some((call) => call.command === "gh" && call.args[0] === "pr" && call.args[1] === "create"), false);
+    const failurePost = slackPosts.at(-1).body.text;
+    assert.match(failurePost, /finished with status failed; no pull request was created or updated/);
+    assert.match(failurePost, /Failed task: /);
+    assert.match(failurePost, /Reason: Could not produce a valid patch/);
+    assert.match(failurePost, /No valid patches in input/);
+  } finally {
+    restoreEnv("SLACK_BOT_TOKEN", previousToken);
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("processJob reports Slack follow-up run failure before updating a PR", async () => {
+  const rootDir = await mkdtemp(path.join(tmpdir(), "assembly-slack-follow-up-run-fail-"));
+  await mkdir(path.join(rootDir, "src"));
+  await mkdir(path.join(rootDir, "tests"));
+  await writeFile(path.join(rootDir, "README.md"), "# Demo\n");
+  await writeFile(path.join(rootDir, "package.json"), JSON.stringify({ scripts: { test: "node --test" } }));
+
+  const previousToken = process.env.SLACK_BOT_TOKEN;
+  const previousFetch = globalThis.fetch;
+  const slackPosts = [];
+  try {
+    process.env.SLACK_BOT_TOKEN = "xoxb-test";
+    globalThis.fetch = async (url, options) => {
+      slackPosts.push({ url, options, body: JSON.parse(options.body) });
+      return { json: async () => ({ ok: true, ts: "124.000" }) };
+    };
+
+    const firstJob = await enqueueJob({
+      type: "slack.request",
+      payload: {
+        kind: "app_mention",
+        eventId: "Ev1",
+        channel: "C1",
+        user: "U1",
+        teamId: "T1",
+        text: "Add README docs",
+        threadTs: "123.456",
+      },
+    }, rootDir);
+    const secondJob = await enqueueJob({
+      type: "slack.request",
+      payload: {
+        kind: "app_mention",
+        eventId: "Ev2",
+        channel: "C1",
+        user: "U1",
+        teamId: "T1",
+        text: "Break the follow-up",
+        threadTs: "123.456",
+      },
+    }, rootDir);
+
+    const calls = [];
+    const exec = async (command, args, options) => {
+      calls.push({ command, args, cwd: options.cwd });
+      if (command === "git" && args.join(" ") === "status --porcelain") {
+        return { stdout: "" };
+      }
+      if (command === "git" && args.join(" ") === "diff --name-only HEAD") {
+        return { stdout: "README.md\n" };
+      }
+      if (command === "git" && args.join(" ") === "branch --show-current") {
+        return { stdout: "main\n" };
+      }
+      if (command === "gh" && args[0] === "pr" && args[1] === "create") {
+        return { stdout: "https://github.com/example/repo/pull/4\n" };
+      }
+      return { stdout: "" };
+    };
+
+    const first = await processJob(firstJob.id, { rootDir, exec, agentRunner: createReadmeAgentRunner() });
+    const firstRunId = first.result.runId;
+    const second = await processJob(secondJob.id, { rootDir, exec: async (command, args, options) => {
+      if (command === "gh" && args[0] === "pr" && args[1] === "view") {
+        return {
+          stdout: JSON.stringify({
+            body: `<!-- assembly:runId=${firstRunId} -->\n<!-- assembly:branchName=assembly/${firstRunId} -->\n# Body`,
+            headRefName: `assembly/${firstRunId}`,
+          }),
+        };
+      }
+      return exec(command, args, options);
+    }, agentRunner: async (task) => {
+      if (task.owner === "implementation-agent") {
+        return {
+          taskId: task.id,
+          status: "failed",
+          summary: "Follow-up patch was invalid.",
+          changedFiles: [],
+          artifacts: ["result.json"],
+          risks: ["No valid patches in input"],
+        };
+      }
+      return {
+        taskId: task.id,
+        status: "complete",
+        summary: "Completed.",
+        changedFiles: [],
+        artifacts: ["result.json"],
+        risks: [],
+      };
+    } });
+
+    assert.equal(second.status, "failed");
+    assert.equal(calls.some((call) => call.command === "gh" && call.args[0] === "pr" && call.args[1] === "edit"), false);
+    const failurePost = slackPosts.at(-1).body.text;
+    assert.match(failurePost, /finished with status failed; no pull request was created or updated/);
+    assert.match(failurePost, /Reason: Follow-up patch was invalid/);
+  } finally {
+    restoreEnv("SLACK_BOT_TOKEN", previousToken);
+    globalThis.fetch = previousFetch;
+  }
+});
+
 test("processJob comments on PR conversation comment failures", async () => {
   const result = await runFailingPrFeedbackJob({
     kind: "issue_comment",

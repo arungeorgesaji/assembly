@@ -6,6 +6,7 @@ import { createFollowUpRun } from "./follow-up.js";
 import { copyRunRecord, withTemporaryGitWorktree } from "./git-worktree.js";
 import { createGitHubPullRequest, getGitHubPullRequest, updateGitHubPullRequestFromRun } from "./github.js";
 import { readJob, updateJob } from "./job-store.js";
+import { readRun } from "./run-store.js";
 import { postSlackMessage } from "./slack.js";
 import { readSlackThreadState, writeSlackThreadState } from "./slack-thread-store.js";
 
@@ -186,6 +187,7 @@ async function processSlackNewPullRequestJob(job, { rootDir, stateRootDir, exec,
   });
   await updateJob(job.id, { runId: run.runId }, stateRootDir);
   await copyRunRecord(run.runId, rootDir, stateRootDir);
+  await assertRunCompleteForDelivery(run.runId, rootDir);
   const pr = await createGitHubPullRequest(run.runId, { rootDir, exec });
   await copyRunRecord(run.runId, rootDir, stateRootDir);
   const prNumber = extractPullRequestNumber(pr.url);
@@ -238,6 +240,7 @@ async function processSlackPrFollowUpJob(job, threadState, { rootDir, stateRootD
     },
   });
   await updateJob(job.id, { runId: followUp.runId }, stateRootDir);
+  await assertRunCompleteForDelivery(followUp.runId, rootDir);
 
   const delivery = await updateGitHubPullRequestFromRun(followUp.runId, {
     rootDir,
@@ -273,6 +276,25 @@ async function processSlackPrFollowUpJob(job, threadState, { rootDir, stateRootD
     },
     delivery,
   };
+}
+
+async function assertRunCompleteForDelivery(runId, rootDir) {
+  const run = await readRun(runId, rootDir);
+  if (run.state.status === "complete") {
+    return;
+  }
+
+  const failure = summarizeRunFailure(run);
+  throw new Error([
+    `run ${runId} finished with status ${run.state.status}; no pull request was created or updated.`,
+    failure ? `Failed task: ${failure.taskId}` : null,
+    failure?.summary ? `Reason: ${failure.summary}` : null,
+    failure?.risks?.length > 0 ? `Details: ${failure.risks.join("; ")}` : null,
+  ].filter(Boolean).join("\n"));
+}
+
+function summarizeRunFailure(run) {
+  return [...run.events].reverse().find((event) => ["task.failed", "task.blocked"].includes(event.type))?.data ?? null;
 }
 
 function getSlackThreadRef(job) {
