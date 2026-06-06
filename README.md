@@ -107,6 +107,8 @@ Jobs are stored under:
 .assembly/jobs/
 ```
 
+> **Note:** Assembly stores local run state inside the `.assembly/runs/` directory within the target repository. Jobs are also stored locally, under `.assembly/jobs/`.
+
 ## How It Works
 
 Assembly creates a plan from a request, assigns scoped tasks, runs agents, validates their output, runs verification, and writes a final report.
