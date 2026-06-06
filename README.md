@@ -2,13 +2,13 @@
 
 Assembly is a coordination layer for AI software engineering teams.
 
-Modern coding agents are powerful, but they usually work alone with broad access to an entire codebase. Assembly introduces the structure used by effective engineering organizations: planning, ownership, specialization, review, testing, traceability, and human-controlled delivery.
+Modern coding agents are powerful, but they typically work alone with broad access to an entire codebase. Assembly introduces the structure characteristic of effective engineering organizations: planning, ownership, specialization, review, testing, traceability, and human-controlled delivery.
 
 Assembly decomposes software development work into focused tasks, assigns those tasks to specialized agents, validates their outputs, and produces merge-ready pull requests with complete execution history.
 
 ## What Assembly Does
 
-Assembly turns a requested software change into a structured engineering workflow.
+Assembly transforms a requested software change into a structured engineering workflow.
 
 1. A Planner Agent analyzes the repository and the requested change.
 2. The planner creates an execution plan with tasks, dependencies, file ownership, and acceptance criteria.
@@ -22,9 +22,9 @@ Human engineers remain in control of the final merge decision.
 
 ## Why Assembly
 
-AI engineering work needs more than code generation. It needs coordination.
+AI engineering requires more than code generation; it needs coordination.
 
-Without structure, agents can make unrelated edits, miss dependencies, duplicate work, overlook regressions, or lose the reasoning behind implementation decisions. Assembly is designed to give AI agents the same operating model that makes human engineering teams effective:
+Without structure, agents can make unrelated edits, miss dependencies, duplicate work, overlook regressions, or lose the reasoning behind implementation decisions. Assembly provides AI agents with the same operating model that makes human engineering teams effective:
 
 - Clear task ownership
 - Limited and relevant context
@@ -39,11 +39,11 @@ Without structure, agents can make unrelated edits, miss dependencies, duplicate
 
 ### Planner Agent
 
-The Planner Agent is responsible for understanding the repository, interpreting the requested change, and producing an execution plan. The plan defines what needs to happen, which agents should do the work, what files or systems they own, and how success will be verified.
+The Planner Agent understands the repository, interprets the requested change, and produces an execution plan. The plan defines what needs to happen, which agents should execute the work, what files or systems they own, and how success will be verified.
 
 ### Specialized Agents
 
-Assembly assigns work to agents with focused responsibilities, such as:
+Assembly assigns work to agents with focused responsibilities such as:
 
 - Frontend development
 - Backend implementation
@@ -54,17 +54,17 @@ Assembly assigns work to agents with focused responsibilities, such as:
 - Documentation
 - Code review
 
-Each agent receives scoped context for its task instead of unrestricted access to the entire project history and plan.
+Each agent receives scoped context relevant to its task instead of unrestricted access to the entire project history and plan.
 
 ### Structured Contracts
 
-Agents do not coordinate through unstructured back-and-forth communication. Assembly uses structured contracts: tasks, dependencies, artifacts, patches, reports, acceptance criteria, and validation results.
+Agents collaborate through structured contracts: tasks, dependencies, artifacts, patches, reports, acceptance criteria, and validation results.
 
-This keeps collaboration auditable and reduces unintended changes across unrelated parts of the codebase.
+This approach keeps collaboration auditable and reduces unintended changes across unrelated parts of the codebase.
 
-### Validation And Review
+### Validation and Review
 
-Assembly validates agent outputs before they are passed forward. Testing agents verify acceptance criteria and regressions. Review agents inspect code quality, architecture, security concerns, and conflicts between changes from different agents.
+Assembly validates agent outputs before passing them forward. Testing agents verify acceptance criteria and regressions. Review agents inspect code quality, architecture, security concerns, and conflicts between changes from different agents.
 
 ### Real-Time Visibility
 
@@ -80,21 +80,21 @@ Assembly provides a live view of:
 - Blockers
 - Decisions and rationale
 
-Developers can see what each agent is doing, why a decision was made, and how the system arrived at the final pull request.
+Developers can see what each agent is doing, why decisions were made, and how the system arrived at the final pull request.
 
 ## Slack Workflow
 
 Assembly integrates with Slack for teams that already coordinate engineering work there.
 
-Developers can request changes, ask questions, or provide feedback from Slack. Assembly routes those requests to the relevant agents, updates the execution plan, generates new changes, refreshes validation, and updates the pull request while preserving traceability.
+Developers can request changes, ask questions, or provide feedback from Slack. Assembly routes those requests to relevant agents, updates the execution plan, generates new changes, refreshes validation, and updates the pull request while preserving traceability.
 
 ## Pull Request Feedback
 
-Developers can also request changes directly from the pull request. Assembly treats PR comments and review feedback as part of the active workflow, routes them to the relevant agents, updates the plan when needed, generates follow-up changes, reruns validation, and refreshes the pull request with the latest results.
+Developers can also request changes directly from pull requests. Assembly treats PR comments and review feedback as part of the active workflow, routes them to relevant agents, updates the plan when needed, generates follow-up changes, reruns validations, and refreshes the PR with the latest results.
 
 ## Pull Request Output
 
-When work is complete, Assembly prepares a merge-ready pull request that includes:
+When work is complete, Assembly prepares a merge-ready pull request including:
 
 - Summary of changes
 - Agent contributions
@@ -105,13 +105,13 @@ When work is complete, Assembly prepares a merge-ready pull request that include
 - Known risks or blockers
 - Links to relevant artifacts and decisions
 
-The pull request is intended to be understandable, auditable, and ready for human review.
+The pull request is designed to be understandable, auditable, and ready for human review.
 
 ## Project Status
 
 Assembly is under active development.
 
-The goal is not to replace engineers. The goal is to make AI-assisted development more structured, accountable, reviewable, and safe for real software teams.
+The goal is not to replace engineers but to make AI-assisted development more structured, accountable, reviewable, and safe for real software teams.
 
 ## Getting Started
 
@@ -121,7 +121,7 @@ Prerequisites:
 
 - Node.js 20 or newer
 
-Run locally without installing:
+Run locally without installation:
 
 ```bash
 node src/cli.js plan "Add Slack workflow support" --pretty
@@ -195,35 +195,35 @@ npm test
 
 ## Current Implementation
 
-The first working slice includes:
+The initial working slice includes:
 
-- A structured execution plan model
+- Structured execution plan model
 - Task ownership, dependencies, acceptance criteria, risks, and verification steps
 - Task folder/file scopes with allowlists and denylists
-- A deterministic request-aware planner for turning a change request into a task graph
+- Deterministic, request-aware planner converting a change request into a task graph
 - Request-specific task shapes for documentation, tests, refactors, and general code changes
-- Repository-aware planning that inspects source, test, documentation, config files, package scripts, and narrows task scopes when request terms identify likely targets
+- Repository-aware planning inspecting source, test, documentation, config files, package scripts, narrowing task scopes based on request terms
 - Lightweight repository inspection for package type and verification commands
-- Plan validation for missing owners, missing acceptance criteria, and invalid dependencies
-- A CLI that emits plan JSON
-- A local run store under `.assembly/runs/<run-id>/`
-- A stub agent runner that produces per-task artifacts
-- Optional OpenAI agent runner selected with `ASSEMBLY_AGENT_PROVIDER=openai`
-- Optional OpenAI review agent that inspects completed task results and verification output
+- Plan validation for missing owners, acceptance criteria, and invalid dependencies
+- CLI emitting plan JSON
+- Local run store under `.assembly/runs/<run-id>/`
+- Stub agent runner producing per-task artifacts
+- Optional OpenAI agent runner selected via `ASSEMBLY_AGENT_PROVIDER=openai`
+- Optional OpenAI review agent inspecting completed task results and verification output
 - Local `.env` loading for `OPENAI_API_KEY` and `OPENAI_MODEL`
 - Approval gate before applying edits, defaulting to `ASSEMBLY_APPROVAL_MODE=auto`
-- Agent result validation for task id, terminal status, summary, changed files, artifacts, and risks
+- Agent result validation including task id, status, summary, changed files, artifacts, and risks
 - Changed-file validation against each task's assigned scope
-- Final git diff validation before PR creation or update to reject files that were not owned by the completed run
-- Unified diff patch validation and local application through `git apply`
-- Structured full-file updates for reliable local edits when patch generation is too brittle
+- Final git diff validation before PR creation or update, rejecting files not owned by the completed run
+- Unified diff patch validation and local application via `git apply`
+- Structured full-file updates for reliable local edits when patch generation is brittle
 - Additive change policy for `Add ...` requests to prevent accidental line removals
 - Post-run verification command execution with stored stdout, stderr, and exit codes
 - Blocked and failed run handling
 - Final report generation for every run
 - Status and inspect commands for persisted runs
 
-Stronger provider-backed coding behavior, richer Slack command syntax, and production deployment hardening are planned next layers.
+Stronger provider-backed coding behavior, richer Slack command syntax, and production deployment hardening are upcoming.
 
 ## Agent Result Contract
 
@@ -242,7 +242,7 @@ Agents must return structured results:
 }
 ```
 
-Valid statuses are `complete`, `blocked`, and `failed`. A completed task must include at least one artifact. If `patch` is present, it must be a unified diff whose changed files are all listed in `changedFiles` and allowed by the task scope. Agents can also return `fileUpdates` entries with full replacement file contents. If the result does not match the dispatched task or fails validation, Assembly marks the task and run as failed.
+Valid statuses: `complete`, `blocked`, `failed`. Completed tasks must include at least one artifact. If `patch` is present, it must be a unified diff whose changed files are all listed in `changedFiles` and allowed by the task scope. Agents can also return `fileUpdates` with full replacement file contents. Invalid or mismatched results mark the task and run as failed.
 
 ## Task Scope Contract
 
@@ -258,21 +258,21 @@ Each task includes a scope:
 }
 ```
 
-Every reported changed file must be a safe relative path inside `paths` or explicitly listed in `allowlist`. Denylisted paths always fail validation. Absolute paths and `../` traversal are rejected.
+Changed files must be safe relative paths inside `paths` or explicitly listed in `allowlist`. Denylisted paths always fail validation. Absolute paths and `../` traversal are rejected.
 
 ## Local Code Editing Flow
 
 For local execution, an agent can return a unified diff in `patch`. Assembly then:
 
-1. extracts changed files from the patch
-2. validates those files against the task scope
-3. verifies every patch file is listed in `changedFiles`
-4. writes `artifacts/<task-id>/patch.diff`
-5. applies the patch with `git apply --check` followed by `git apply`
-6. runs detected verification commands such as `npm test`
-7. writes verification output to `artifacts/verification/result.json`
+1. Extracts changed files from the patch
+2. Validates those files against the task scope
+3. Verifies every patch file is listed in `changedFiles`
+4. Writes `artifacts/<task-id>/patch.diff`
+5. Applies the patch with `git apply --check` followed by `git apply`
+6. Runs detected verification commands such as `npm test`
+7. Writes verification output to `artifacts/verification/result.json`
 
-For model-generated edits, Assembly also supports `fileUpdates`:
+For model-generated edits, Assembly supports `fileUpdates`:
 
 ```json
 {
@@ -285,9 +285,9 @@ For model-generated edits, Assembly also supports `fileUpdates`:
 }
 ```
 
-Assembly validates each update path against task scope before writing it. For requests that begin with `Add`, implementation tasks use an additive change policy: existing file lines must remain in the same order, so accidental rewrites or removals fail validation.
+Assembly validates each update path against the task scope before writing. For requests beginning with `Add`, an additive change policy ensures existing lines remain in order to prevent accidental removals.
 
-## Planning And Review
+## Planning and Review
 
 The local planner is deterministic but request-aware:
 
@@ -296,7 +296,7 @@ The local planner is deterministic but request-aware:
 - refactor requests create a refactor task scoped to implementation files
 - general code requests create an implementation task scoped to `src/`, `tests/`, and selected project files
 
-When `ASSEMBLY_AGENT_PROVIDER=openai` is enabled, OpenAI currently handles implementation and review tasks. Planner tasks remain deterministic. Review runs after implementation verification, inspects the run state and artifacts, and can mark the workflow `complete`, `blocked`, or `failed`.
+When `ASSEMBLY_AGENT_PROVIDER=openai` is enabled, OpenAI handles implementation and review tasks. Planner tasks remain deterministic. Review runs after implementation verification to inspect run state and artifacts, possibly marking the workflow `complete`, `blocked`, or `failed`.
 
 ## Approval Modes
 
@@ -308,7 +308,7 @@ Assembly validates agent output before any edit is applied, then passes the resu
 
 Local CLI defaults to `auto`. Slack and GitHub flows can use `manual` later for human approval before delivery.
 
-## Follow-Up And GitHub Flow
+## Follow-Up and GitHub Flow
 
 Create a local follow-up run from feedback:
 
@@ -322,15 +322,15 @@ Create a GitHub pull request from a completed run:
 node src/cli.js github create-pr <run-id>
 ```
 
-The GitHub PR command uses `gh` and `git`. It creates and pushes a branch named `assembly/<run-id>`, opens a PR using the run report, then switches your local checkout back to the branch you started from.
+The GitHub PR command uses `gh` and `git`. It creates and pushes a branch named `assembly/<run-id>`, opens a PR using the run report, then switches your local checkout back to the original branch.
 
 Before creating a PR, Assembly requires:
 
-- the run status is `complete`
+- run status is `complete`
 - verification passed
 - review completed successfully
-- the run has owned changed files
-- the working tree has no unrelated dirty files
+- run has owned changed files
+- working tree has no unrelated dirty files
 
 Only files recorded by the completed run are staged. Assembly does not use `git add .` for PR creation.
 
@@ -382,7 +382,7 @@ Configure a Slack app:
 - Copy the signing secret to `SLACK_SIGNING_SECRET`
 - Copy the bot token to `SLACK_BOT_TOKEN`
 
-Set local environment:
+Set local environment variables:
 
 ```text
 GITHUB_WEBHOOK_SECRET=your_webhook_secret
@@ -392,36 +392,36 @@ ASSEMBLY_AGENT_PROVIDER=openai
 ASSEMBLY_APPROVAL_MODE=auto
 ```
 
-GitHub webhook events must include `@assembly` in the issue, comment, or review body. Slack requests can come from an app mention or direct message.
+GitHub webhook events must include `@assembly` in the issue, comment, or review body. Slack requests come from app mentions or direct messages.
 
 Supported events:
 
-- `issues.opened` / `issues.edited` on normal issues: creates a new run and opens a new PR
-- `issue_comment.created` on normal issues: creates a new run and opens a new PR
-- `issue_comment.created` on PRs: creates a follow-up run, updates the existing PR branch, refreshes the PR body with the latest run report, and posts a completion comment
-- `pull_request_review_comment.created`: creates a follow-up run with inline file/line context, updates the existing PR branch, refreshes the PR body, and posts a completion comment
-- `pull_request_review.submitted`: creates a follow-up run from the review body, updates the existing PR branch, refreshes the PR body, and posts a completion comment
+- `issues.opened` / `issues.edited`: creates a new run and opens a new PR
+- `issue_comment.created` on issues: creates a new run and opens a new PR
+- `issue_comment.created` on PRs: creates a follow-up run, updates the PR branch, refreshes the PR body, and posts a completion comment
+- `pull_request_review_comment.created`: creates a follow-up run with inline context, updates the PR branch, refreshes the PR body, and posts a comment
+- `pull_request_review.submitted`: creates a follow-up run from the review, updates the PR branch, refreshes the PR body, and posts a comment
 
 Webhook handling is asynchronous:
 
 1. verify GitHub signature
 2. ignore unsupported events or comments without `@assembly`
-3. ignore duplicate GitHub delivery IDs that already have a job
+3. ignore duplicate GitHub delivery IDs with existing jobs
 4. enqueue a job under `.assembly/jobs/`
 5. respond to GitHub quickly
 6. process the job in the background
-7. create a temporary git worktree so webhook jobs do not touch your dirty local checkout
+7. create a temporary git worktree to avoid touching your dirty local checkout
 8. create a run or follow-up run
 9. copy the run record back into `.assembly/runs/`
-10. push owned changes to a new PR branch or existing PR branch
-11. refresh the PR body with the latest run report for PR follow-ups
+10. push owned changes to a new or existing PR branch
+11. refresh the PR body with the latest run report for follow-ups
 12. comment back on the issue or PR
 
-If a GitHub job fails, Assembly comments back on the issue or PR with the job id, run id when one was created, retryability, the failure reason, and a suggested next action.
+On GitHub job failure, Assembly comments with the job id, run id if any, retryability, failure reason, and suggested next action.
 
-Slack handling verifies Slack signatures, answers URL verification challenges, deduplicates Slack event ids, and queues `slack.request` jobs. The first request in a Slack thread creates an Assembly run, opens a GitHub PR, stores the Slack thread to PR mapping under `.assembly/slack-threads/`, and replies in the originating thread with the PR link. Later requests in that same Slack thread become follow-up runs against the same PR branch, refresh the PR body, and reply in the thread. If a Slack job fails, Assembly replies in the thread with the job id, run id when one was created, retryability, the failure reason, and a suggested next action.
+Slack handling verifies Slack signatures, answers URL verification challenges, deduplicates Slack event IDs, and queues `slack.request` jobs. The first request in a Slack thread creates an Assembly run, opens a GitHub PR, stores the Slack thread to PR mapping under `.assembly/slack-threads/`, and replies with the PR link. Later requests in the same thread become follow-up runs against the same PR branch, refreshing the PR body and replying in the thread. Slack job failures result in reply comments with details.
 
-For manual retry/debugging:
+Manual retry/debugging:
 
 ```bash
 node src/cli.js job list
