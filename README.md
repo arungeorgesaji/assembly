@@ -155,6 +155,14 @@ Start the webhook server:
 assembly webhook --port 3000
 ```
 
+**Troubleshooting:** Before starting the webhook server, it is recommended to run:
+
+```bash
+assembly doctor
+```
+
+This command checks for required environment variables and setup, helping identify any missing configuration that could cause webhook operation issues.
+
 Expose it with a tunnel:
 
 ```bash
