@@ -4,7 +4,7 @@ Assembly is a Node.js CLI for coordinating AI coding work with scoped tasks, val
 
 It runs inside a target Git repository, stores state under `.assembly/`, and can create or update pull requests from local commands, GitHub comments, or Slack requests.
 
-Assembly supports interaction via CLI, GitHub, and Slack requests, enabling flexible coordination of AI coding tasks across these platforms.
+Assembly supports interaction via CLI, GitHub, and Slack requests, enabling flexible coordination of AI coding tasks across these platforms. It also supports same-thread Slack follow ups for seamless conversation continuity.
 
 Assembly supports CLI, GitHub, and Slack requests.
 
