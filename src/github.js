@@ -129,6 +129,14 @@ export async function validateRunReadyForPullRequest(run, changedFiles, rootDir,
   }
 
   const finalDiffFiles = await getFinalDiffFiles(rootDir, exec);
+  const missingDiffFiles = changedFiles.filter((file) => !finalDiffFiles.includes(file));
+  if (missingDiffFiles.length > 0) {
+    throw new Error(
+      `run ${run.state.runId} owns files with no current git diff: ${missingDiffFiles.join(", ")}. ` +
+      "Create the PR before committing those changes to the base branch, or create a new run from the current branch.",
+    );
+  }
+
   const unownedDiffFiles = finalDiffFiles.filter((file) => !changedFiles.includes(file));
   if (unownedDiffFiles.length > 0) {
     throw new Error(`final diff includes files not owned by run ${run.state.runId}: ${unownedDiffFiles.join(", ")}`);

@@ -100,6 +100,24 @@ test("createGitHubPullRequest rejects final diff files not owned by the run", as
   );
 });
 
+test("createGitHubPullRequest rejects run-owned files that are already committed", async () => {
+  const { rootDir } = await createCompletedRunFixture();
+  const exec = async (command, args) => {
+    if (command === "git" && args.join(" ") === "status --porcelain") {
+      return { stdout: "" };
+    }
+    if (command === "git" && args.join(" ") === "diff --name-only HEAD") {
+      return { stdout: "" };
+    }
+    return { stdout: "" };
+  };
+
+  await assert.rejects(
+    () => createGitHubPullRequest("run-1", { rootDir, exec }),
+    /run run-1 owns files with no current git diff: README\.md/,
+  );
+});
+
 test("createGitHubPullRequest rejects runs without completed review", async () => {
   const { rootDir } = await createCompletedRunFixture({ includeReview: false });
   const exec = async (command, args) => {

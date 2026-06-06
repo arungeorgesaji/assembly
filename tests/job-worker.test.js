@@ -32,6 +32,9 @@ test("processJob creates a run and PR for GitHub issue requests", async () => {
     if (command === "git" && args.join(" ") === "status --porcelain") {
       return { stdout: "" };
     }
+    if (command === "git" && args.join(" ") === "diff --name-only HEAD") {
+      return { stdout: "README.md\n" };
+    }
     if (command === "git" && args.join(" ") === "branch --show-current") {
       return { stdout: "main\n" };
     }
