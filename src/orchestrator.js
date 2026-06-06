@@ -1,8 +1,10 @@
 import { createAgentRunner } from "./agent-runner.js";
+import { applyPatch } from "./patch.js";
 import { createPlan } from "./planner.js";
 import { createFinalReport } from "./report.js";
 import { validateTaskResult } from "./result-validation.js";
 import { validatePlan } from "./validation.js";
+import { runVerificationCommands } from "./verification-runner.js";
 import {
   appendEvent,
   createRunId,
@@ -15,7 +17,7 @@ import {
 
 export async function createRun(request, { rootDir = process.cwd(), agentRunner } = {}) {
   const resolvedAgentRunner = agentRunner ?? createAgentRunner();
-  const plan = createPlan(request);
+  const plan = createPlan(request, { rootDir });
   const errors = validatePlan(plan);
   if (errors.length > 0) {
     throw new Error(errors.join("\n"));
@@ -45,9 +47,29 @@ async function executeReadyTasks({ runId, plan, state, rootDir, agentRunner }) {
     await writeState(runId, state, rootDir);
     await appendEvent(runId, { type: "task.started", taskId: task.id }, rootDir);
 
-    const result = await agentRunner(task);
+    let result;
+    try {
+      result = await agentRunner(task);
+    } catch (error) {
+      const failure = {
+        taskId: task.id,
+        status: "failed",
+        summary: "Agent execution failed.",
+        changedFiles: [],
+        artifacts: [],
+        risks: [error.message],
+      };
+      state.tasks[task.id].status = "failed";
+      state.currentTaskId = null;
+      await writeState(runId, state, rootDir);
+      await appendEvent(runId, { type: "task.failed", taskId: task.id, data: failure }, rootDir);
+      break;
+    }
     const resultErrors = validateTaskResult(task, result);
     await writeArtifact(runId, task.id, "result.json", result, rootDir);
+    if (result.patch) {
+      await writeRunFile(runId, `artifacts/${task.id}/patch.diff`, result.patch, rootDir);
+    }
 
     if (resultErrors.length > 0) {
       const failure = {
@@ -66,6 +88,28 @@ async function executeReadyTasks({ runId, plan, state, rootDir, agentRunner }) {
       break;
     }
 
+    if (result.status === "complete" && result.patch) {
+      try {
+        await applyPatch(result.patch, rootDir);
+        await appendEvent(runId, { type: "patch.applied", taskId: task.id, data: { changedFiles: result.changedFiles } }, rootDir);
+      } catch (error) {
+        const failure = {
+          taskId: task.id,
+          status: "failed",
+          summary: "Patch failed to apply.",
+          changedFiles: result.changedFiles,
+          artifacts: ["result.json", "patch.diff"],
+          risks: [error.message],
+        };
+        state.tasks[task.id].status = "failed";
+        state.currentTaskId = null;
+        await writeArtifact(runId, task.id, "patch-errors.json", { error: error.message }, rootDir);
+        await writeState(runId, state, rootDir);
+        await appendEvent(runId, { type: "task.failed", taskId: task.id, data: failure }, rootDir);
+        break;
+      }
+    }
+
     state.tasks[task.id].status = result.status;
     state.currentTaskId = null;
     await writeState(runId, state, rootDir);
@@ -77,6 +121,18 @@ async function executeReadyTasks({ runId, plan, state, rootDir, agentRunner }) {
   }
 
   state.status = determineRunStatus(state);
+
+  if (state.status === "complete" && plan.verification.length > 0) {
+    await appendEvent(runId, { type: "verification.started", data: { commands: plan.verification } }, rootDir);
+    const verificationResults = await runVerificationCommands(plan.verification, rootDir);
+    await writeArtifact(runId, "verification", "result.json", verificationResults, rootDir);
+    await appendEvent(runId, { type: "verification.completed", data: { results: verificationResults } }, rootDir);
+
+    if (verificationResults.some((result) => result.exitCode !== 0)) {
+      state.status = "failed";
+    }
+  }
+
   await writeState(runId, state, rootDir);
   await appendEvent(runId, { type: `run.${state.status}` }, rootDir);
 

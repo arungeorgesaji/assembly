@@ -180,6 +180,9 @@ Each run writes:
   artifacts/
     <task-id>/
       result.json
+      patch.diff
+    verification/
+      result.json
 ```
 
 Run tests:
@@ -196,6 +199,7 @@ The first working slice includes:
 - Task ownership, dependencies, acceptance criteria, risks, and verification steps
 - Task folder/file scopes with allowlists and denylists
 - A deterministic planner for turning a change request into a task graph
+- Lightweight repository inspection for package type and verification commands
 - Plan validation for missing owners, missing acceptance criteria, and invalid dependencies
 - A CLI that emits plan JSON
 - A local run store under `.assembly/runs/<run-id>/`
@@ -204,6 +208,8 @@ The first working slice includes:
 - Local `.env` loading for `OPENAI_API_KEY` and `OPENAI_MODEL`
 - Agent result validation for task id, terminal status, summary, changed files, artifacts, and risks
 - Changed-file validation against each task's assigned scope
+- Unified diff patch validation and local application through `git apply`
+- Post-run verification command execution with stored stdout, stderr, and exit codes
 - Blocked and failed run handling
 - Final report generation for every run
 - Status and inspect commands for persisted runs
@@ -221,11 +227,12 @@ Agents must return structured results:
   "summary": "What happened.",
   "changedFiles": [],
   "artifacts": ["result.json"],
-  "risks": []
+  "risks": [],
+  "patch": ""
 }
 ```
 
-Valid statuses are `complete`, `blocked`, and `failed`. A completed task must include at least one artifact. If the result does not match the dispatched task or fails validation, Assembly marks the task and run as failed.
+Valid statuses are `complete`, `blocked`, and `failed`. A completed task must include at least one artifact. If `patch` is present, it must be a unified diff whose changed files are all listed in `changedFiles` and allowed by the task scope. If the result does not match the dispatched task or fails validation, Assembly marks the task and run as failed.
 
 ## Task Scope Contract
 
@@ -242,6 +249,18 @@ Each task includes a scope:
 ```
 
 Every reported changed file must be a safe relative path inside `paths` or explicitly listed in `allowlist`. Denylisted paths always fail validation. Absolute paths and `../` traversal are rejected.
+
+## Local Code Editing Flow
+
+For local execution, an agent can return a unified diff in `patch`. Assembly then:
+
+1. extracts changed files from the patch
+2. validates those files against the task scope
+3. verifies every patch file is listed in `changedFiles`
+4. writes `artifacts/<task-id>/patch.diff`
+5. applies the patch with `git apply --check` followed by `git apply`
+6. runs detected verification commands such as `npm test`
+7. writes verification output to `artifacts/verification/result.json`
 
 ## License
 

@@ -3,7 +3,7 @@ import { getOpenAIConfig } from "./config.js";
 const RESULT_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["taskId", "status", "summary", "changedFiles", "artifacts", "risks"],
+  required: ["taskId", "status", "summary", "changedFiles", "artifacts", "risks", "patch"],
   properties: {
     taskId: { type: "string" },
     status: { type: "string", enum: ["complete", "blocked", "failed"] },
@@ -19,6 +19,10 @@ const RESULT_SCHEMA = {
     risks: {
       type: "array",
       items: { type: "string" },
+    },
+    patch: {
+      type: "string",
+      description: "Unified diff patch to apply. Empty string if no code changes are needed.",
     },
   },
 };
@@ -41,7 +45,8 @@ export function createOpenAIAgentRunner(config = getOpenAIConfig()) {
                 type: "input_text",
                 text:
                   "You are an Assembly task agent. Return only data matching the supplied schema. " +
-                  "Do not claim changed files unless your task result actually requires them.",
+                  "If you make code changes, include a unified diff in patch and list every changed file. " +
+                  "Changed files must stay within the task scope.",
               },
             ],
           },
@@ -98,4 +103,3 @@ function formatOpenAIError(status, payload) {
   const message = payload?.error?.message ?? "unknown OpenAI API error";
   return `OpenAI API request failed with status ${status}: ${message}`;
 }
-

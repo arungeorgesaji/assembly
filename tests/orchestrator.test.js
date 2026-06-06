@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -116,4 +116,86 @@ test("createRun stops when an agent blocks a task", async () => {
     run.events.map((event) => event.type),
     ["run.created", "run.started", "task.started", "task.blocked", "run.blocked"],
   );
+});
+
+test("createRun applies a valid task patch", async () => {
+  const rootDir = await mkdtemp(path.join(tmpdir(), "assembly-apply-patch-"));
+  await mkdir(path.join(rootDir, "src"));
+  await mkdir(path.join(rootDir, "tests"));
+  await writeFile(path.join(rootDir, "package.json"), JSON.stringify({ scripts: { test: "node --test" } }));
+  await writeFile(path.join(rootDir, "src/local.js"), "export const value = 1;\n");
+
+  const patch = [
+    "diff --git a/src/local.js b/src/local.js",
+    "index 1471b8a..c97e022 100644",
+    "--- a/src/local.js",
+    "+++ b/src/local.js",
+    "@@ -1 +1 @@",
+    "-export const value = 1;",
+    "+export const value = 2;",
+    "",
+  ].join("\n");
+
+  const { runId } = await createRun("Update local value", {
+    rootDir,
+    agentRunner: async (task) => {
+      if (task.owner === "implementation-agent") {
+        return {
+          taskId: task.id,
+          status: "complete",
+          summary: "Updated local value.",
+          changedFiles: ["src/local.js"],
+          artifacts: ["result.json", "patch.diff"],
+          risks: [],
+          patch,
+        };
+      }
+
+      return {
+        taskId: task.id,
+        status: "complete",
+        summary: "No code changes needed.",
+        changedFiles: [],
+        artifacts: ["result.json"],
+        risks: [],
+      };
+    },
+  });
+
+  const run = await readRun(runId, rootDir);
+  assert.equal(run.state.status, "complete");
+  assert.equal(await readFile(path.join(rootDir, "src/local.js"), "utf8"), "export const value = 2;\n");
+  assert.ok(run.events.some((event) => event.type === "patch.applied"));
+});
+
+test("createRun fails when verification command fails", async () => {
+  const rootDir = await mkdtemp(path.join(tmpdir(), "assembly-verification-fail-"));
+  await mkdir(path.join(rootDir, "src"));
+  await mkdir(path.join(rootDir, "tests"));
+  await writeFile(
+    path.join(rootDir, "package.json"),
+    JSON.stringify({ scripts: { test: "node -e \"process.exit(1)\"" } }),
+  );
+
+  const { runId } = await createRun("Fail verification", {
+    rootDir,
+    agentRunner: async (task) => ({
+      taskId: task.id,
+      status: "complete",
+      summary: "Completed without changes.",
+      changedFiles: [],
+      artifacts: ["result.json"],
+      risks: [],
+    }),
+  });
+
+  const run = await readRun(runId, rootDir);
+  assert.equal(run.state.status, "failed");
+  assert.ok(run.events.some((event) => event.type === "verification.completed"));
+
+  const verification = JSON.parse(
+    await readFile(path.join(getRunDir(runId, rootDir), "artifacts", "verification", "result.json"), "utf8"),
+  );
+  assert.equal(verification[0].command, "npm test");
+  assert.equal(verification[0].exitCode, 1);
 });

@@ -1,4 +1,5 @@
 import { validateChangedFilesWithinScope } from "./scope.js";
+import { validatePatchForTask } from "./patch.js";
 
 const TERMINAL_STATUSES = new Set(["complete", "blocked", "failed"]);
 
@@ -32,6 +33,12 @@ export function validateTaskResult(task, result) {
   }
   if (Array.isArray(result.changedFiles)) {
     errors.push(...validateChangedFilesWithinScope(task, result.changedFiles));
+  }
+  if (result.patch !== undefined && typeof result.patch !== "string") {
+    errors.push(`task ${task.id} result patch must be a string when provided`);
+  }
+  if (typeof result.patch === "string") {
+    errors.push(...validatePatchForTask(task, result));
   }
 
   return errors;

@@ -32,6 +32,7 @@ test("OpenAI agent runner posts task and parses structured output", async () => 
             changedFiles: [],
             artifacts: ["result.json"],
             risks: [],
+            patch: "",
           }),
         }),
       };
@@ -50,9 +51,9 @@ test("OpenAI agent runner posts task and parses structured output", async () => 
       changedFiles: [],
       artifacts: ["result.json"],
       risks: [],
+      patch: "",
     });
   } finally {
     globalThis.fetch = previousFetch;
   }
 });
-

@@ -1,8 +1,12 @@
 import { createExecutionPlan, createTask } from "./models.js";
+import { inspectRepository } from "./repo-inspector.js";
 
-export function createPlan(request) {
+export function createPlan(request, { rootDir = process.cwd(), repoContext = inspectRepository(rootDir) } = {}) {
   const normalizedRequest = normalizeRequest(request);
   const slug = slugify(normalizedRequest);
+  const implementationScope = repoContext.suggestedScopes.implementation;
+  const reviewScope = repoContext.suggestedScopes.review;
+  const verification = repoContext.verificationCommands;
 
   const tasks = [
     createTask({
@@ -28,11 +32,7 @@ export function createPlan(request) {
       owner: "implementation-agent",
       description:
         "Make the smallest coherent code changes needed to satisfy the approved plan.",
-      scope: {
-        paths: ["src/", "tests/"],
-        allowlist: ["package.json", "package-lock.json", "README.md", ".gitignore"],
-        denylist: [".env", ".env.*", ".git/", ".assembly/"],
-      },
+      scope: implementationScope,
       dependencies: [`${slug}-plan`],
       acceptanceCriteria: [
         "Changes are limited to the assigned ownership area.",
@@ -45,11 +45,7 @@ export function createPlan(request) {
       owner: "review-agent",
       description:
         "Run relevant checks, review the diff, and summarize risks before human handoff.",
-      scope: {
-        paths: ["tests/", ".assembly/"],
-        allowlist: ["README.md"],
-        denylist: [".env", ".env.*", ".git/"],
-      },
+      scope: reviewScope,
       dependencies: [`${slug}-implement`],
       acceptanceCriteria: [
         "Automated checks pass or failures are documented.",
@@ -65,10 +61,7 @@ export function createPlan(request) {
     risks: [
       "This initial planner uses deterministic templates until provider-backed agents are integrated.",
     ],
-    verification: [
-      "Run unit tests for the planner and CLI.",
-      "Inspect generated plan JSON for complete task contracts.",
-    ],
+    verification,
   });
 }
 
