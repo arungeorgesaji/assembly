@@ -1,188 +1,120 @@
 # Assembly
 
-Assembly is a Node.js CLI for coordinating AI coding work with scoped tasks, validation, review, and GitHub/Slack workflows.
+## Overview
 
-It runs inside a target Git repository, stores state under `.assembly/`, and can create or update pull requests from local commands, GitHub comments, or Slack requests.
+Assembly is a Node.js CLI for coordinating AI coding work across local commands, GitHub, and Slack. It turns a request into scoped tasks, runs agents, validates their output, and can create or update pull requests.
 
-Assembly supports interaction via CLI, GitHub, and Slack requests, enabling flexible coordination of AI coding tasks across these platforms.
+## Problem Statement
 
-## Install
+AI coding agents are useful, but they often work with broad repository access and weak process boundaries. That makes it easy to get unrelated edits, unclear ownership, missing review, and poor traceability.
 
-Install as a dependency:
+## Solution
+
+Assembly adds an orchestration layer around coding agents. It creates a plan, assigns scoped task ownership, gives agents focused context, validates changed files, runs verification, records execution history, and delivers changes through pull requests.
+
+## Features
+
+- CLI workflow for `plan`, `run`, `status`, `inspect`, and PR creation
+- GitHub issue, PR comment, review comment, and review submission handling
+- Slack request handling with thread follow-ups
+- Scoped task ownership with allowlists and denylists
+- Dynamic agent profiles generated from each task's scope
+- OpenAI-backed implementation and review agents
+- Local run and job history under `.assembly/`
+- Verification and review gates before PR creation
+
+## Tech Stack
+
+- Frontend: None
+- Backend: Node.js CLI and local webhook server
+- Database: Local JSON files under `.assembly/`
+- APIs: OpenAI API, GitHub CLI/API, Slack Events API
+- Hosting: Local machine, with optional tunnel such as ngrok for webhooks
+
+## Codex / OpenAI Usage
+
+Codex and OpenAI were used throughout the build for:
+
+- Ideation and product direction
+- Architecture planning for planner, worker, review, GitHub, and Slack flows
+- Code generation for the Node.js CLI and orchestration modules
+- Debugging run failures, GitHub PR creation, npm publishing, and webhook behavior
+- Test generation for planner, job worker, GitHub, Slack, scoped edits, and CLI flows
+- README and package documentation
+- OpenAI API integration for implementation and review agents
+
+Assembly itself can also use OpenAI at runtime when `ASSEMBLY_AGENT_PROVIDER=openai` is configured.
+
+## Demo
+
+[![Video Title](https://img.youtube.com/vi/RGeRlXx37tI/0.jpg)](https://www.youtube.com/watch?v=RGeRlXx37tI)
+
+## Screenshots
+
+![Assembly screenshot 1](image-1.png)
+
+![Assembly screenshot 2](image-2.png)
+
+![Assembly screenshot 3](image-3.png)
+
+## How to Run Locally
+
+Install the package:
 
 ```bash
 npm i @arungeorgesaji/assembly
 ```
 
-Install the CLI globally:
+Or install the CLI globally:
 
 ```bash
 npm install -g @arungeorgesaji/assembly
 ```
 
-Then use:
+Initialize Assembly inside a target repository:
 
 ```bash
+cd <project-folder>
 assembly init
 assembly doctor
-assembly webhook --port 3000
 ```
 
-## Quick Start
-
-From the repository Assembly should modify:
-
-```bash
-cd my-repo
-assembly init
-assembly doctor
-assembly plan "Add README setup notes" --pretty
-assembly run "Add README setup notes" --pretty
-```
-
-`assembly init` creates:
+Configure `.env`:
 
 ```text
-.env
-.assembly/
-```
-
-Assembly resolves the target to the Git repository root. To target another checkout:
-
-```bash
-assembly --repo /path/to/repo doctor
-```
-
-## Configuration
-
-`.env` is loaded from the target repo:
-
-```text
-ASSEMBLY_AGENT_PROVIDER=stub
+ASSEMBLY_AGENT_PROVIDER=openai
 ASSEMBLY_APPROVAL_MODE=auto
-OPENAI_API_KEY=
+OPENAI_API_KEY=your_api_key
 OPENAI_MODEL=gpt-4.1-mini
-GITHUB_WEBHOOK_SECRET=
-SLACK_SIGNING_SECRET=
-SLACK_BOT_TOKEN=
+GITHUB_WEBHOOK_SECRET=your_github_webhook_secret
+SLACK_SIGNING_SECRET=your_slack_signing_secret
+SLACK_BOT_TOKEN=xoxb-your-slack-bot-token
 ```
 
-Use `ASSEMBLY_AGENT_PROVIDER=stub` for no-op local testing. Use `openai` for provider-backed implementation and review.
-
-Run:
+Run a local request:
 
 ```bash
-assembly doctor
-```
-
-to check missing setup.
-
-## Commands
-
-```bash
-assembly init [--force]
-assembly doctor [--json] [--pretty]
-assembly plan "request" --pretty
-assembly run "request" --pretty
-assembly follow-up <run-id> "feedback" --pretty
-assembly status <run-id>
-assembly inspect <run-id> --pretty
-assembly github create-pr <run-id>
-assembly job list
-assembly job inspect <job-id> --pretty
-assembly job process <job-id>
-assembly job retry <job-id>
-assembly webhook --port 3000
-```
-
-Runs are stored under:
-
-```text
-.assembly/runs/<run-id>/
-```
-
-Jobs are stored under:
-
-```text
-.assembly/jobs/
-```
-
-## How It Works
-
-Assembly creates a plan from a request, assigns scoped tasks, runs agents, validates their output, runs verification, and writes a final report.
-
-Current task owners:
-
-- `planner`
-- `implementation-agent`
-- `review-agent`
-
-Plans also include dynamic agent profiles derived from each task's scope, denylist, and change policy. These profiles are not predefined personas; they are generated per plan and passed to implementation/review agents as the delegation contract.
-
-Assembly validates:
-
-- task dependencies and acceptance criteria
-- changed files against task scope
-- denied paths such as `.env`, `.git/`, and `.assembly/`
-- agent result shape
-- additive edits for `Add ...` requests
-- final git diff before PR creation
-- review completion before PR creation
-
-
-Assembly supports CLI, GitHub, and Slack requests, enabling flexible coordination of AI coding tasks across these platforms.
-
-
-## GitHub
-
-Create a PR from a completed run:
-
-```bash
+assembly run "Add README setup notes" --pretty
 assembly github create-pr <run-id>
 ```
 
-Requirements:
-
-- `gh auth login` or `GH_TOKEN` / `GITHUB_TOKEN`
-- clean working tree except run-owned files
-- completed run
-- completed review
-- passing verification
-
-Assembly stages only files owned by the run. It does not use `git add .`.
-
-## Webhooks
-
-Start the webhook server:
+Start webhooks:
 
 ```bash
 assembly webhook --port 3000
 ```
 
-Expose it with a tunnel:
+Expose locally if needed:
 
 ```bash
 ngrok http 3000
 ```
 
-GitHub webhook:
-
-- Payload URL: `https://<tunnel>/github/webhook`
-- Content type: `application/json`
-- Secret: `GITHUB_WEBHOOK_SECRET`
-- Events: issues, issue comments, pull request review comments, pull request reviews
-
-Slack app:
-
-- Request URL: `https://<tunnel>/slack/events`
-- Bot events: `app_mention`, `message.im`
-- Env: `SLACK_SIGNING_SECRET`, `SLACK_BOT_TOKEN`
-
-Mention `@assembly` in GitHub issues, PR comments, review comments, or Slack messages to queue work.
-
-## Development
+For development on Assembly itself:
 
 ```bash
+git clone <repo-url>
+cd assembly
 npm install
 npm test
 npm link
